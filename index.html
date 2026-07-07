@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise Geoespacial Avançada - Operação</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --sidebar-color: #2c2c2c;
+            --text-color: #e0e0e0;
+            --accent-color: #4CAF50;
+            --remove-color: #f44336;
+            --filter-color: #9C27B0;
+            --data-color: #FF9800;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color); color: var(--text-color);
+            display: flex; height: 100vh; overflow: hidden;
+        }
+
+        #sidebar {
+            width: 350px; min-width: 350px; 
+            background-color: var(--sidebar-color);
+            padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+            display: flex; flex-direction: column; z-index: 1000; 
+            overflow-y: auto; overflow-x: hidden;
+            transition: all 0.3s ease;
+        }
+        #sidebar.collapsed { width: 0; min-width: 0; padding-left: 0; padding-right: 0; border: none; }
+
+        #map-container { flex-grow: 1; position: relative; }
+        #map { height: 100%; width: 100%; background: #000; }
+        
+        .hamburger-btn {
+            position: absolute; top: 15px; left: 15px; z-index: 1000;
+            background-color: var(--sidebar-color); color: white; border: 1px solid #555;
+            border-radius: 5px; padding: 8px 12px; cursor: pointer; font-size: 1.2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: background-color 0.3s;
+        }
+        .hamburger-btn:hover { background-color: #444; }
+
+        h2, h3 { margin-top: 0; }
+
+        .file-upload-wrapper {
+            margin-bottom: 20px; padding: 15px; border: 2px dashed #555;
+            border-radius: 8px; text-align: center;
+        }
+        input[type="file"] { display: none; }
+        .custom-file-upload {
+            display: inline-block; padding: 10px 20px; cursor: pointer;
+            background-color: #444; border-radius: 5px; transition: 0.3s; width: 80%;
+            margin-bottom: 10px;
+        }
+        .custom-file-upload:hover { background-color: #555; }
+
+        /* --- Secções Retráteis --- */
+        .collapsible-section { background-color: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .border-filter { border-left: 4px solid var(--filter-color); }
+        .border-data { border-left: 4px solid var(--data-color); }
+
+        .section-header {
+            cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+            margin: 0; transition: color 0.2s; user-select: none;
+        }
+        .section-header:hover { color: #fff; }
+        .section-content { margin-top: 15px; overflow: hidden; transition: max-height 0.3s ease; }
+        .collapsed-content { display: none; } 
+
+        .filter-group { margin-bottom: 10px; }
+        .filter-group label { display: block; font-size: 0.85rem; margin-bottom: 5px; color: #bbb; }
+        .filter-group input[type="text"], .filter-group input[type="number"] {
+            width: 90%; padding: 8px; border-radius: 4px; border: 1px solid #555;
+            background-color: #222; color: white; color-scheme: dark; box-sizing: border-box;
+        }
+        .btn-action {
+            width: 100%; padding: 10px; background-color: var(--filter-color);
+            color: white; border: none; border-radius: 4px; cursor: pointer;
+            font-weight: bold; margin-top: 5px; transition: 0.3s;
+        }
+        .btn-action:hover { background-color: #7B1FA2; }
+
+        /* --- Paleta de Cores Chips --- */
+        .color-palette-container {
+            display: flex; gap: 6px; align-items: center; margin-top: 5px;
+        }
+        .color-chip {
+            width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; transition: transform 0.1s, border-color 0.1s;
+        }
+        .color-chip:hover { transform: scale(1.1); }
+        .color-chip.selected { border-color: #fff; transform: scale(1.1); }
+
+        /* --- Lista de Ficheiros --- */
+        #file-list-container h3 { border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px;}
+        #file-list { list-style: none; padding: 0; margin: 0; }
+        .file-item {
+            background-color: #3a3a3a; margin-bottom: 10px; padding: 12px;
+            border-radius: 6px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .file-name { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+        .action-btn { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; min-width: 80px; }
+        .btn-plot { background-color: var(--accent-color); color: white; }
+        .btn-plot:hover { background-color: #43a047; }
+        .btn-remove { background-color: var(--remove-color); color: white; }
+        .btn-remove:hover { background-color: #d32f2f; }
+
+        /* --- Lista de Dados Importados Individuais --- */
+        .data-item {
+            display: flex; align-items: center; justify-content: space-between;
+            background-color: #2a2a2a; border: 1px solid #444; padding: 8px;
+            margin-bottom: 5px; border-radius: 4px;
+        }
+        .data-item-left { display: flex; align-items: center; gap: 8px; overflow: hidden; width: 60%; }
+        .data-item-name { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .data-item-right { display: flex; gap: 6px; align-items: center; }
+        .icon-btn {
+            background: transparent; border: none; cursor: pointer; padding: 4px;
+            font-size: 1rem; border-radius: 4px; transition: 0.2s;
+        }
+        .icon-btn:hover { background-color: #444; }
+        
+        .inline-color-picker {
+            padding: 0; width: 20px; height: 20px; border: none; 
+            background: transparent; cursor: pointer; border-radius: 50%;
+        }
+
+        .count-icon {
+            background: rgba(255, 50, 50, 0.8); border: 2px solid white; color: white;
+            font-weight: bold; text-align: center; border-radius: 50%;
+            line-height: 30px; box-shadow: 0 0 10px rgba(255,0,0,0.5);
+        }
+        .leaflet-control-layers {
+            background: rgba(44, 44, 44, 0.9) !important; color: #e0e0e0 !important;
+            border: 1px solid #555 !important; border-radius: 5px !important;
+        }
+
+        /* --- Modais --- */
+        #delete-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: #333; padding: 20px; border-radius: 8px; text-align: center;
+            border: 1px solid #555; min-width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .modal-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin: 5px; }
+        .btn-confirm-del { background: #f44336; color: white; }
+        .btn-cancel { background: #555; color: white; }
+
+        .radio-group {
+            background: #222; padding: 10px; border-radius: 4px; 
+            display: flex; gap: 15px; border: 1px solid #555;
+            box-sizing: border-box; width: 90%;
+        }
+        .radio-group label { margin: 0; cursor: pointer; display: flex; align-items: center; gap: 5px;}
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>Painel Analítico</h2>
+        
+        <div class="file-upload-wrapper">
+            <label for="file-upload" class="custom-file-upload">📂 Importar (CSV/Excel/JSON)</label>
+            <input id="file-upload" type="file" accept=".csv, .xlsx, .xls, .json"/>
+            
+            <button class="btn-action" onclick="exportVisiblePointsToJson()" style="background-color: #1976D2; width: 92%; margin: 0 auto; display: block;">💾 Exportar (JSON)</button>
+        </div>
+
+        <div class="collapsible-section border-filter">
+            <h3 class="section-header" onclick="toggleSection('manual-content', 'manual-icon')">
+                Adicionar Ponto Manual <span id="manual-icon">▼</span>
+            </h3>
+            <div id="manual-content" class="section-content collapsed-content">
+                <div class="filter-group">
+                    <label>Rótulo (Nome):</label>
+                    <input type="text" id="manual-name" placeholder="Ex: Alvo Alpha / Antena Central">
+                </div>
+                
+                <div class="filter-group">
+                    <label>Tipo de Registro:</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="manual-type" value="geoloc" checked onchange="toggleManualType()"> Geoloc</label>
+                        <label><input type="radio" name="manual-type" value="erb" onchange="toggleManualType()"> ERB (Antena)</label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <div class="filter-group" style="flex: 1;">
+                        <label>Latitude:</label>
+                        <input type="number" id="manual-lat" step="any" placeholder="-23.5505">
+                    </div>
+                    <div class="filter-group" style="flex: 1;">
+                        <label>Longitude:</label>
+                        <input type="number" id="manual-lon" step="any" placeholder="-46.6333">
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label>Selecione a Cor do Ponto:</label>
+                    <div class="color-palette-container">
+                        <div class="color-chip selected" style="background: #e53935;" onclick="selectPaletteColor('#e53935', this)"></div>
+                        <div class="color-chip" style="background: #1e88e5;" onclick="selectPaletteColor('#1e88e5', this)"></div>
+                        <div class="color-chip" style="background: #43a047;" onclick="selectPaletteColor('#43a047', this)"></div>
+                        <div class="color-chip" style="background: #ffb300;" onclick="selectPaletteColor('#ffb300', this)"></div>
+                        <div class="color-chip" style="background: #8e24aa;" onclick="selectPaletteColor('#8e24aa', this)"></div>
+                        <div class="color-chip" style="background: #f4511E;" onclick="selectPaletteColor('#f4511E', this)"></div>
+                        <div class="color-chip" style="background: #00acc1;" onclick="selectPaletteColor('#00acc1', this)"></div>
+                        <input type="color" id="manual-color" value="#e53935" style="padding: 0; width: 24px; height: 24px; border: none; background: transparent; cursor: pointer;" onchange="selectPaletteColor(this.value, null)">
+                    </div>
+                </div>
+
+                <div id="erb-controls" style="display: none; background: #2a2a2a; padding: 10px; border-radius: 4px; border-left: 3px solid var(--accent-color); margin-bottom: 10px;">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <div class="filter-group" style="flex: 1; margin: 0;">
+                            <label>Azimute:</label>
+                            <input type="number" id="manual-azim" step="any" placeholder="Ex: 120" style="width: 100%;">
+                        </div>
+                        <div class="filter-group" style="flex: 2; margin: 0;">
+                            <label>Raio (m): <span id="radius-val" style="color: var(--accent-color); font-weight: bold;">1000</span></label>
+                            <input type="range" id="manual-radius" min="1000" max="5000" step="100" value="1000" oninput="document.getElementById('radius-val').innerText = this.value" style="width: 100%; cursor: pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn-action" onclick="addManualPoint()">➕ Inserir no Mapa</button>
+            </div>
+        </div>
+
+        <div class="collapsible-section border-data">
+            <h3 class="section-header" onclick="toggleSection('data-content', 'data-icon')">
+                Dados Importados <span id="data-icon">▼</span>
+            </h3>
+            <div id="data-content" class="section-content collapsed-content">
+                
+                <div style="display: flex; gap: 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #444;">
+                    <button onclick="toggleAllPoints(true)" style="flex: 1; padding: 6px; background-color: #444; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: 0.2s;">☑️ Marcar Todos</button>
+                    <button onclick="toggleAllPoints(false)" style="flex: 1; padding: 6px; background-color: #444; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: 0.2s;">☐ Desmarcar Todos</button>
+                </div>
+
+                <ul id="imported-data-list" style="list-style:none; padding:0; margin:0; max-height: 400px; overflow-y: auto;">
+                    <li style="color:#777; font-size:0.85rem; text-align:center;">Nenhum dado plotado no momento.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="file-list-container">
+            <h3>Ficheiros em Análise</h3>
+            <ul id="file-list"></ul>
+        </div>
+    </div>
+
+    <div id="map-container">
+        <button class="hamburger-btn" onclick="toggleSidebar()" title="Recolher/Expandir Menu">☰</button>
+        <div id="map"></div>
+    </div>
+
+    <div id="delete-modal">
+        <div class="modal-content">
+            <p>Tem a certeza que deseja excluir permanentemente esta linha de registo?</p>
+            <button class="modal-btn btn-confirm-del" onclick="confirmDelete()">Excluir</button>
+            <button class="modal-btn btn-cancel" onclick="closeModal()">Cancelar</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        // --- INTERFACE ---
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+            setTimeout(() => { map.invalidateSize(); }, 300);
+        }
+
+        function toggleSection(contentId, iconId) {
+            const content = document.getElementById(contentId);
+            const icon = document.getElementById(iconId);
+            content.classList.toggle('collapsed-content');
+            icon.innerText = content.classList.contains('collapsed-content') ? '▼' : '▲';
+        }
+
+        function toggleManualType() {
+            const isErb = document.querySelector('input[name="manual-type"]:checked').value === 'erb';
+            document.getElementById('erb-controls').style.display = isErb ? 'block' : 'none';
+        }
+
+        function selectPaletteColor(color, element) {
+            document.getElementById('manual-color').value = color;
+            document.querySelectorAll('.color-chip').forEach(chip => chip.classList.remove('selected'));
+            if(element) element.classList.add('selected');
+        }
+
+        let eventToDeleteId = null;
+        function openDeleteModal(id) {
+            eventToDeleteId = id;
+            document.getElementById('delete-modal').style.display = 'flex';
+        }
+        function closeModal() {
+            eventToDeleteId = null;
+            document.getElementById('delete-modal').style.display = 'none';
+        }
+        function confirmDelete() {
+            if (eventToDeleteId && pointMetadata[eventToDeleteId]) {
+                pointMetadata[eventToDeleteId].deleted = true;
+                redrawAllPlotted();
+            }
+            closeModal();
+        }
+
+        // --- MAPA ---
+        const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20 });
+        const osmStreets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+        const esriSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+
+        const map = L.map('map', { zoomControl: false, layers: [osmStreets] }).setView([-15.78, -47.92], 4);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        L.control.layers({ "Ruas": osmStreets, "Modo Escuro": cartoDark, "Satélite": esriSatellite }, null, { position: 'topright' }).addTo(map);
+
+        // --- DADOS E METADADOS ---
+        let fileCounter = 0;
+        let loadedFilesData = [];
+        let pointMetadata = {}; 
+        const globalUniqueSignatures = new Set();
+
+        // --- FUNÇÕES MATEMÁTICAS (ERB) ---
+        function computeDestinationPoint(start, distance, bearing) {
+            const R = 6378137; const brng = bearing * Math.PI / 180;
+            const lat1 = start.lat * Math.PI / 180; const lon1 = start.lng * Math.PI / 180;
+            const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distance / R) + Math.cos(lat1) * Math.sin(distance / R) * Math.cos(brng));
+            const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distance / R) * Math.cos(lat1), Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2));
+            return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
+        }
+        function createSector(center, radius, azimuth, beamwidth) {
+            const points = [center];
+            for (let i = 0; i <= 50; i++) {
+                const angle = (azimuth - beamwidth / 2) + (i * beamwidth / 50);
+                points.push(computeDestinationPoint(L.latLng(center[0], center[1]), radius, angle));
+            }
+            return points;
+        }
+
+        // --- EXPORTAR E IMPORTAR JSON LÓGICA ---
+        function exportVisiblePointsToJson() {
+            let exportData = [];
+
+            loadedFilesData.forEach(fileObj => {
+                if (fileObj.isPlotted) {
+                    fileObj.filteredPoints.forEach(pt => {
+                        const meta = pointMetadata[pt.id];
+                        // Filtra apenas pontos que estão renderizados (não deletados e marcados como visíveis)
+                        if (meta && !meta.deleted && meta.visible) {
+                            exportData.push({
+                                name: meta.name,
+                                lat: pt.lat,
+                                lon: pt.lon,
+                                azim: pt.azim,
+                                radius: pt.radius || 1000,
+                                color: meta.color,
+                                timestamp: pt.timestamp
+                            });
+                        }
+                    });
+                }
+            });
+
+            if (exportData.length === 0) {
+                alert("Nenhum ponto visível no mapa para exportar.");
+                return;
+            }
+
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", url);
+            downloadAnchorNode.setAttribute("download", `mapa_exportado_${new Date().getTime()}.json`);
+            document.body.appendChild(downloadAnchorNode); 
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        function processJsonData(fileName, jsonData) {
+            const extractedPoints = [];
+            let duplicadosIgnorados = 0;
+
+            jsonData.forEach(item => {
+                const lat = parseFloat(item.lat);
+                const lon = parseFloat(item.lon);
+                const azim = item.azim !== null && item.azim !== undefined ? parseFloat(item.azim) : null;
+                const radius = item.radius ? parseInt(item.radius, 10) : 1000;
+                const color = item.color || (azim !== null ? '#1e88e5' : '#e53935');
+                const name = item.name || 'Ponto Importado JSON';
+                const timestamp = item.timestamp || Date.now();
+
+                if (isNaN(lat) || isNaN(lon)) return;
+
+                // Usa o nome salvo como parte da assinatura para evitar duplicidade global
+                const signature = `${name}_${lat}_${lon}_${azim}`;
+                
+                if (globalUniqueSignatures.has(signature)) {
+                    duplicadosIgnorados++; return; 
+                }
+                globalUniqueSignatures.add(signature);
+
+                const eventId = 'evt_' + Math.random().toString(36).substr(2, 9) + Date.now();
+                
+                pointMetadata[eventId] = {
+                    name: name,
+                    visible: true,
+                    deleted: false,
+                    color: color 
+                };
+
+                extractedPoints.push({ id: eventId, lat, lon, timestamp, azim, radius });
+            });
+
+            if (extractedPoints.length === 0) {
+                if (duplicadosIgnorados > 0) {
+                    return alert(`Todos os ${duplicadosIgnorados} registros deste JSON já estão no mapa.`);
+                }
+                return alert("Nenhum dado válido processado no JSON.");
+            }
+
+            loadedFilesData.push({
+                id: ++fileCounter, name: fileName,
+                allPoints: extractedPoints, filteredPoints: extractedPoints,
+                layers: { heat: null, cluster: null, erbs: null }, isPlotted: false
+            });
+            
+            updateFileListUI();
+            alert(`${extractedPoints.length} pontos importados com sucesso!`);
+        }
+
+        // --- PONTO MANUAL LÓGICA ---
+        function addManualPoint() {
+            const nameInput = document.getElementById('manual-name').value.trim();
+            const latVal = document.getElementById('manual-lat').value;
+            const lonVal = document.getElementById('manual-lon').value;
+            const color = document.getElementById('manual-color').value;
+            const isErb = document.querySelector('input[name="manual-type"]:checked').value === 'erb';
+
+            if (!latVal || !lonVal) {
+                alert("Latitude e Longitude são obrigatórios.");
+                return;
+            }
+
+            const lat = parseFloat(latVal.replace(',', '.'));
+            const lon = parseFloat(lonVal.replace(',', '.'));
+            let azim = null;
+            let radius = 1000;
+
+            if (isErb) {
+                const azimVal = document.getElementById('manual-azim').value;
+                if (azimVal === '') {
+                    alert("Por favor, defina um Azimute para a ERB.");
+                    return;
+                }
+                azim = parseFloat(azimVal.replace(',', '.'));
+                radius = parseInt(document.getElementById('manual-radius').value, 10);
+            }
+
+            if (isNaN(lat) || isNaN(lon)) {
+                alert("Coordenadas inválidas.");
+                return;
+            }
+
+            const name = nameInput !== "" ? nameInput : (isErb ? 'ERB Manual' : 'Ponto Manual');
+            const eventId = 'man_' + Math.random().toString(36).substr(2, 9) + Date.now();
+            
+            pointMetadata[eventId] = {
+                name: name,
+                visible: true,
+                deleted: false,
+                color: color
+            };
+
+            let manualFileObj = loadedFilesData.find(f => f.name === "📍 Pontos Manuais");
+            
+            if (!manualFileObj) {
+                manualFileObj = {
+                    id: ++fileCounter, name: "📍 Pontos Manuais",
+                    allPoints: [], filteredPoints: [],
+                    layers: { heat: null, cluster: null, erbs: null }, isPlotted: true
+                };
+                loadedFilesData.push(manualFileObj);
+            }
+
+            manualFileObj.allPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim, radius });
+            manualFileObj.filteredPoints = manualFileObj.allPoints;
+
+            updateFileListUI();
+            redrawAllPlotted(true);
+        }
+
+        // --- BUSCA DINÂMICA DE CABEÇALHO ---
+        function extractDataWithDynamicHeader(raw2DArray) {
+            if (!raw2DArray || raw2DArray.length === 0) return null;
+            let headerIndex = -1;
+            let headers = [];
+
+            for (let i = 0; i < raw2DArray.length; i++) {
+                const row = raw2DArray[i];
+                if (!row || !Array.isArray(row)) continue;
+                const rowStrings = row.map(cell => String(cell).toLowerCase().trim());
+                
+                const temLat = rowStrings.some(str => str.includes('latitude') || str === 'lat');
+                const temLon = rowStrings.some(str => str.includes('longitude') || str === 'lon' || str === 'lng');
+                
+                if (temLat && temLon) {
+                    headerIndex = i;
+                    headers = row.map(cell => cell ? String(cell) : ""); 
+                    break;
+                }
+            }
+
+            if (headerIndex === -1) return null;
+
+            const extractedData = [];
+            for (let i = headerIndex + 1; i < raw2DArray.length; i++) {
+                const row = raw2DArray[i];
+                if (!row || row.length === 0) continue;
+                
+                const obj = {};
+                let isRowEmpty = true;
+                
+                for (let j = 0; j < headers.length; j++) {
+                    const colName = headers[j];
+                    if (colName) {
+                        obj[colName] = row[j];
+                        if (row[j] !== undefined && row[j] !== null && String(row[j]).trim() !== "") {
+                            isRowEmpty = false;
+                        }
+                    }
+                }
+                if (!isRowEmpty) { extractedData.push(obj); }
+            }
+            return extractedData;
+        }
+
+        // --- LEITURA DE ARQUIVOS ---
+        document.getElementById('file-upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const fileName = file.name.toLowerCase();
+
+            if (fileName.endsWith('.json')) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const parsedData = JSON.parse(event.target.result);
+                        if (Array.isArray(parsedData)) {
+                            processJsonData(file.name, parsedData);
+                        } else {
+                            alert("O arquivo JSON não está no formato esperado (Array de pontos).");
+                        }
+                    } catch(err) {
+                        alert("Erro ao ler o arquivo JSON.");
+                    }
+                };
+                reader.readAsText(file);
+            } 
+            else if (fileName.endsWith('.csv')) {
+                Papa.parse(file, {
+                    header: false, skipEmptyLines: true, dynamicTyping: true,
+                    complete: function(results) {
+                        if (results.data && results.data.length > 0) {
+                            const jsonData = extractDataWithDynamicHeader(results.data);
+                            if (jsonData) { processRawData(file.name, jsonData); } 
+                            else { alert(`Não foi possível localizar as colunas de Latitude e Longitude no arquivo "${file.name}".`); }
+                        }
+                    }
+                });
+            } 
+            else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                    const rawArray = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
+                    
+                    if (rawArray && rawArray.length > 0) {
+                        const jsonData = extractDataWithDynamicHeader(rawArray);
+                        if (jsonData) { processRawData(file.name, jsonData); } 
+                        else { alert(`Não foi possível localizar as colunas de Latitude e Longitude no arquivo "${file.name}".`); }
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+            this.value = '';
+        });
+
+        function processRawData(fileName, rawData) {
+            if (!rawData || rawData.length === 0) return;
+
+            const normalizedData = rawData.map(row => {
+                const newRow = {};
+                Object.keys(row).forEach(key => { newRow[String(key).replace(/^\uFEFF/, '').trim().toLowerCase()] = row[key]; });
+                return newRow;
+            });
+
+            const extractedPoints = [];
+            let duplicadosIgnorados = 0;
+
+            normalizedData.forEach(row => {
+                const latVal = row['latitude']; const lonVal = row['longitude'];
+                const azimVal = row['azimute'] !== undefined ? row['azimute'] : (row['azimuth'] !== undefined ? row['azimuth'] : null);
+
+                if (latVal === undefined || latVal === null || latVal === '' || lonVal === undefined || lonVal === null || lonVal === '') return;
+
+                const lat = parseFloat(String(latVal).replace(',', '.'));
+                const lon = parseFloat(String(lonVal).replace(',', '.'));
+                let azim = azimVal !== null && azimVal !== '' ? parseFloat(String(azimVal).replace(',', '.')) : null;
+                
+                let dataStr = row['data do evento'] || row['data evento'] || row['data'] || row['data_evento'] || '';
+                let horaStr = row['hora do evento'] || row['hora evento'] || row['hora'] || row['hora_evento'] || '';
+                
+                let dateTimeRaw = '';
+                if (dataStr) dateTimeRaw += dataStr;
+                if (horaStr) dateTimeRaw += (dateTimeRaw ? ' ' : '') + horaStr;
+
+                if (!dateTimeRaw) {
+                    dateTimeRaw = row['data e hora'] || row['data hora'] || row['timestamp'] || 'Data Oculta';
+                }
+
+                const signature = `${dateTimeRaw}_${lat}_${lon}_${azim}`;
+                
+                if (globalUniqueSignatures.has(signature)) {
+                    duplicadosIgnorados++; return; 
+                }
+                globalUniqueSignatures.add(signature);
+
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    const eventId = 'evt_' + Math.random().toString(36).substr(2, 9) + Date.now();
+                    const defaultColor = (azim !== null && !isNaN(azim)) ? '#1e88e5' : '#e53935';
+
+                    pointMetadata[eventId] = {
+                        name: dateTimeRaw,
+                        visible: true,
+                        deleted: false,
+                        color: defaultColor 
+                    };
+
+                    extractedPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim, radius: 1000 });
+                }
+            });
+
+            if (extractedPoints.length === 0) {
+                if (duplicadosIgnorados > 0) {
+                    return alert(`Todos os ${duplicadosIgnorados} registros deste arquivo eram duplicados e já constam no mapa.`);
+                }
+                return alert("Nenhuma coordenada válida processada no arquivo.");
+            }
+
+            loadedFilesData.push({
+                id: ++fileCounter, name: fileName,
+                allPoints: extractedPoints, filteredPoints: extractedPoints,
+                layers: { heat: null, cluster: null, erbs: null }, isPlotted: false
+            });
+            
+            updateFileListUI();
+        }
+
+        // --- SELEÇÃO E LÓGICA DA LISTA ---
+        function togglePointVisibility(id) {
+            if (pointMetadata[id]) {
+                pointMetadata[id].visible = !pointMetadata[id].visible;
+                redrawAllPlotted();
+            }
+        }
+
+        function toggleAllPoints(state) {
+            let stateChanged = false;
+            
+            loadedFilesData.forEach(fileObj => {
+                if(fileObj.isPlotted) {
+                    fileObj.filteredPoints.forEach(pt => {
+                        if (pointMetadata[pt.id] && !pointMetadata[pt.id].deleted) {
+                            if (pointMetadata[pt.id].visible !== state) {
+                                pointMetadata[pt.id].visible = state;
+                                stateChanged = true;
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (stateChanged) { redrawAllPlotted(); }
+        }
+
+        function editPointName(id) {
+            if (pointMetadata[id]) {
+                const newName = prompt("Digite o novo nome para este registo:", pointMetadata[id].name);
+                if (newName !== null && newName.trim() !== "") {
+                    pointMetadata[id].name = newName.trim();
+                    redrawAllPlotted(); 
+                }
+            }
+        }
+
+        function updateFileListUI() {
+            const list = document.getElementById('file-list');
+            list.innerHTML = loadedFilesData.length === 0 ? '<li style="color:#777;font-style:italic;">Nenhum ficheiro.</li>' : '';
+
+            loadedFilesData.forEach(fileObj => {
+                const li = document.createElement('li'); li.className = 'file-item';
+                const countText = `${fileObj.allPoints.length} eventos`;
+
+                li.innerHTML = `<span class="file-name" title="${fileObj.name}"><strong>${fileObj.name}</strong><br><small>${countText}</small></span>`;
+                
+                const btn = document.createElement('button');
+                btn.className = `action-btn ${fileObj.isPlotted ? 'btn-remove' : 'btn-plot'}`;
+                btn.innerText = fileObj.isPlotted ? 'Remover' : 'Plotar';
+                btn.onclick = function() { togglePlotFile(fileObj, this); };
+                
+                li.appendChild(btn); list.appendChild(li);
+            });
+        }
+
+        function updateImportedDataUI() {
+            const list = document.getElementById('imported-data-list');
+            list.innerHTML = '';
+            let hasPlottedData = false;
+
+            loadedFilesData.forEach(fileObj => {
+                if(fileObj.isPlotted) {
+                    fileObj.filteredPoints.forEach(pt => {
+                        const meta = pointMetadata[pt.id];
+                        if(!meta || meta.deleted) return; 
+
+                        hasPlottedData = true;
+
+                        const li = document.createElement('li');
+                        li.className = 'data-item';
+                        
+                        li.style.borderLeft = `4px solid ${meta.color}`;
+
+                        const leftDiv = document.createElement('div');
+                        leftDiv.className = 'data-item-left';
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = meta.visible;
+                        checkbox.onchange = () => togglePointVisibility(pt.id);
+
+                        const nameSpan = document.createElement('span');
+                        nameSpan.className = 'data-item-name';
+                        nameSpan.innerText = meta.name;
+                        nameSpan.title = meta.name;
+
+                        leftDiv.appendChild(checkbox);
+                        leftDiv.appendChild(nameSpan);
+
+                        const rightDiv = document.createElement('div');
+                        rightDiv.className = 'data-item-right';
+                        
+                        const colorInput = document.createElement('input');
+                        colorInput.type = 'color';
+                        colorInput.className = 'inline-color-picker';
+                        colorInput.value = meta.color;
+                        colorInput.title = "Alterar Cor deste Registro";
+                        colorInput.onchange = (e) => {
+                            meta.color = e.target.value;
+                            redrawAllPlotted();
+                        };
+                        
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'icon-btn'; editBtn.innerHTML = '✏️'; editBtn.title = "Editar Nome";
+                        editBtn.onclick = () => editPointName(pt.id);
+
+                        const delBtn = document.createElement('button');
+                        delBtn.className = 'icon-btn'; delBtn.innerHTML = '🗑️'; delBtn.title = "Remover Linha";
+                        delBtn.onclick = () => openDeleteModal(pt.id);
+
+                        rightDiv.appendChild(colorInput);
+                        rightDiv.appendChild(editBtn); 
+                        rightDiv.appendChild(delBtn);
+
+                        li.appendChild(leftDiv); li.appendChild(rightDiv);
+                        list.appendChild(li);
+                    });
+                }
+            });
+
+            if (!hasPlottedData) {
+                list.innerHTML = '<li style="color:#777; font-size:0.85rem; text-align:center;">Nenhum dado plotado no momento.</li>';
+            }
+        }
+
+        // --- RENDERIZAÇÃO NO MAPA ---
+        function togglePlotFile(fileObj, btnElement) {
+            if (fileObj.isPlotted) {
+                fileObj.isPlotted = false;
+                btnElement.innerText = 'Plotar'; btnElement.className = 'action-btn btn-plot';
+            } else {
+                fileObj.isPlotted = true;
+                btnElement.innerText = 'Remover'; btnElement.className = 'action-btn btn-remove';
+            }
+            redrawAllPlotted(true); 
+        }
+
+        function hexToRgba(hex, alpha) {
+            hex = hex.replace('#', '');
+            const r = parseInt(hex.substring(0, 2), 16) || 0;
+            const g = parseInt(hex.substring(2, 4), 16) || 0;
+            const b = parseInt(hex.substring(4, 6), 16) || 255; 
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        function aggregateActivePointsForDrawing(activePoints) {
+            const groups = {};
+            activePoints.forEach(pt => {
+                const meta = pointMetadata[pt.id];
+                const ptColor = meta.color; 
+                
+                const key = `${pt.lat.toFixed(6)}_${pt.lon.toFixed(6)}_${pt.azim}_${ptColor}_${pt.radius}`;
+                
+                if (!groups[key]) groups[key] = { lat: pt.lat, lon: pt.lon, azim: pt.azim, color: ptColor, radius: pt.radius, count: 0, names: [] };
+                groups[key].count++;
+                groups[key].names.push(meta.name);
+            });
+            return Object.values(groups);
+        }
+
+        function redrawAllPlotted(shouldPan = false) {
+            loadedFilesData.forEach(f => {
+                if (f.layers.heat) map.removeLayer(f.layers.heat);
+                if (f.layers.cluster) map.removeLayer(f.layers.cluster);
+                if (f.layers.erbs) map.removeLayer(f.layers.erbs);
+            });
+
+            const allMarkersGroup = L.featureGroup();
+
+            loadedFilesData.forEach(fileObj => {
+                if (!fileObj.isPlotted || fileObj.filteredPoints.length === 0) return;
+
+                const activeEvents = fileObj.filteredPoints.filter(pt => {
+                    const meta = pointMetadata[pt.id];
+                    return meta && !meta.deleted && meta.visible;
+                });
+
+                if (activeEvents.length === 0) return;
+
+                const aggregatedData = aggregateActivePointsForDrawing(activeEvents);
+
+                const heatPoints = aggregatedData.map(pt => [pt.lat, pt.lon, Math.min(pt.count / 5, 1)]);
+                const heatLayer = L.heatLayer(heatPoints, { radius: 25, blur: 15, maxZoom: 17, gradient: {0.4: 'blue', 0.65: 'lime', 1: 'red'} });
+                const markers = L.markerClusterGroup({ maxClusterRadius: 50, spiderfyOnMaxZoom: true, showCoverageOnHover: false });
+                const erbsLayer = L.featureGroup();
+                
+                const beamwidth = 120; 
+
+                aggregatedData.forEach(pt => {
+                    let displayNames = pt.names.length > 3 
+                        ? `${pt.names[0]}<br>${pt.names[1]}<br><em>... e mais ${pt.names.length - 2} registos</em>` 
+                        : pt.names.join('<br>');
+
+                    const icon = pt.count > 1 ? L.divIcon({ className: 'count-icon', html: pt.count, iconSize: [30,30], iconAnchor: [15,15] }) : null;
+                    
+                    const marker = icon ? L.marker([pt.lat, pt.lon], {icon}) : L.circleMarker([pt.lat, pt.lon], {radius: 5, color: pt.color, fillOpacity: 0.8, weight: 1});
+                    
+                    let popupText = `<strong>Registos:</strong><br>${displayNames}<br><br>Eventos Ativos: ${pt.count}`;
+                    if (pt.azim !== null && !isNaN(pt.azim)) popupText += `<br>Azimute: ${pt.azim}° <br>Raio: ${pt.radius}m`;
+                    marker.bindPopup(popupText);
+                    
+                    if (pt.azim === null || isNaN(pt.azim)) {
+                        marker.bindTooltip(`<b>${displayNames}</b>`, { permanent: true, direction: 'top', offset: [0, -5] });
+                    }
+                    
+                    markers.addLayer(marker);
+
+                    if (pt.azim !== null && !isNaN(pt.azim)) {
+                        const sectorPoints = createSector([pt.lat, pt.lon], pt.radius, pt.azim, beamwidth);
+                        
+                        const erbPolygon = L.polygon(sectorPoints, { stroke: false, fillColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: 1 });
+                        erbPolygon.bindPopup(`<strong>Setor da ERB</strong><br>Direção: ${pt.azim}°<br>Raio: ${pt.radius}m<br>Registos Ativos: ${pt.count}`);
+                        erbsLayer.addLayer(erbPolygon);
+
+                        const endPoint = computeDestinationPoint(L.latLng(pt.lat, pt.lon), pt.radius, pt.azim);
+                        erbsLayer.addLayer(L.polyline([[pt.lat, pt.lon], endPoint], { color: 'red', weight: 2, opacity: 0.8 }));
+                        L.circleMarker([pt.lat, pt.lon], { radius: 3, color: '#000', fillColor: '#000', fillOpacity: 1 }).addTo(erbsLayer);
+                    }
+                });
+
+                map.addLayer(heatLayer); map.addLayer(erbsLayer); map.addLayer(markers);   
+                
+                fileObj.layers.heat = heatLayer; fileObj.layers.cluster = markers; fileObj.layers.erbs = erbsLayer;
+                allMarkersGroup.addLayer(markers);
+            });
+
+            if (shouldPan && Object.keys(allMarkersGroup._layers).length > 0) {
+                map.fitBounds(allMarkersGroup.getBounds().pad(0.1), { animate: true, duration: 1 });
+            }
+
+            updateImportedDataUI();
+        }
+    </script>
+</body>
+</html>
