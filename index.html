@@ -931,8 +931,8 @@
                     
                     const marker = icon ? L.marker([pt.lat, pt.lon], {icon}) : L.circleMarker([pt.lat, pt.lon], {radius: 5, color: pt.color, fillOpacity: 0.8, weight: 1});
                     
-                    let popupText = `<strong>Registos:</strong><br>${displayNames}<br><br>Eventos Ativos: ${pt.count}`;
-                    if (pt.azim !== null && !isNaN(pt.azim)) popupText += `<br>Azimute: ${pt.azim}° <br>Raio: ${pt.radius}m`;
+                    let popupText = `<strong>Registos:</strong><br>${displayNames}<br>Eventos: ${pt.count}`;
+                    if (pt.azim !== null && !isNaN(pt.azim)) popupText += ` - Raio: ${pt.radius}m`;
                     marker.bindPopup(popupText);
                     
                     if (pt.azim === null || isNaN(pt.azim)) {
@@ -945,7 +945,7 @@
                         const sectorPoints = createSector([pt.lat, pt.lon], pt.radius, pt.azim, beamwidth);
                         
                         const erbPolygon = L.polygon(sectorPoints, { stroke: false, fillColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: 1 });
-                        erbPolygon.bindPopup(`<strong>Setor da ERB</strong><br>Direção: ${pt.azim}°<br>Raio: ${pt.radius}m<br>Registos Ativos: ${pt.count}`);
+                        erbPolygon.bindPopup(`<strong>Setor da ERB</strong><br>Direção: ${pt.azim}°<br>Raio: ${pt.radius}m<br>Registos: ${pt.count}`);
                         erbsLayer.addLayer(erbPolygon);
 
                         const endPoint = computeDestinationPoint(L.latLng(pt.lat, pt.lon), pt.radius, pt.azim);
