@@ -25,23 +25,26 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color); color: var(--text-color);
             display: flex; height: 100vh; overflow: hidden;
+            position: relative;
         }
 
         #sidebar {
             width: 350px; min-width: 350px; 
             background-color: var(--sidebar-color);
             padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.3);
-            display: flex; flex-direction: column; z-index: 1000; 
+            display: flex; flex-direction: column; z-index: 2000; 
             overflow-y: auto; overflow-x: hidden;
             transition: all 0.3s ease;
+            box-sizing: border-box;
         }
+        
         #sidebar.collapsed { width: 0; min-width: 0; padding-left: 0; padding-right: 0; border: none; }
 
-        #map-container { flex-grow: 1; position: relative; }
+        #map-container { flex-grow: 1; position: relative; width: 100%; height: 100%; }
         #map { height: 100%; width: 100%; background: #000; }
         
         .hamburger-btn {
-            position: absolute; top: 15px; left: 15px; z-index: 1000;
+            position: absolute; top: 15px; left: 15px; z-index: 2001;
             background-color: var(--sidebar-color); color: white; border: 1px solid #555;
             border-radius: 5px; padding: 8px 12px; cursor: pointer; font-size: 1.2rem;
             box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: background-color 0.3s;
@@ -90,7 +93,7 @@
 
         /* --- Paleta de Cores Chips --- */
         .color-palette-container {
-            display: flex; gap: 6px; align-items: center; margin-top: 5px;
+            display: flex; gap: 6px; align-items: center; margin-top: 5px; flex-wrap: wrap;
         }
         .color-chip {
             width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
@@ -117,11 +120,11 @@
         .data-item {
             display: flex; align-items: center; justify-content: space-between;
             background-color: #2a2a2a; border: 1px solid #444; padding: 8px;
-            margin-bottom: 5px; border-radius: 4px;
+            margin-bottom: 5px; border-radius: 4px; gap: 8px;
         }
-        .data-item-left { display: flex; align-items: center; gap: 8px; overflow: hidden; width: 60%; }
+        .data-item-left { display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1; }
         .data-item-name { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .data-item-right { display: flex; gap: 6px; align-items: center; }
+        .data-item-right { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
         .icon-btn {
             background: transparent; border: none; cursor: pointer; padding: 4px;
             font-size: 1rem; border-radius: 4px; transition: 0.2s;
@@ -131,6 +134,11 @@
         .inline-color-picker {
             padding: 0; width: 20px; height: 20px; border: none; 
             background: transparent; cursor: pointer; border-radius: 50%;
+        }
+        .inline-radius-picker {
+            width: 65px; padding: 2px 4px; border: 1px solid #555;
+            background: #222; color: #fff; border-radius: 4px;
+            font-size: 0.8rem; text-align: center;
         }
 
         .count-icon {
@@ -146,7 +154,7 @@
         /* --- Modais --- */
         #delete-modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center;
         }
         .modal-content {
             background: #333; padding: 20px; border-radius: 8px; text-align: center;
@@ -159,9 +167,28 @@
         .radio-group {
             background: #222; padding: 10px; border-radius: 4px; 
             display: flex; gap: 15px; border: 1px solid #555;
-            box-sizing: border-box; width: 90%;
+            box-sizing: border-box; width: 90%; flex-wrap: wrap;
         }
         .radio-group label { margin: 0; cursor: pointer; display: flex; align-items: center; gap: 5px;}
+
+        /* --- RESPONSIVIDADE PARA MOBILE --- */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: absolute;
+                top: 0; left: 0; height: 100%;
+                width: 85%; max-width: 350px;
+                transform: translateX(0);
+            }
+            #sidebar.collapsed {
+                transform: translateX(-100%);
+                width: 85%; padding-left: 20px; padding-right: 20px;
+            }
+            #sidebar h2 { margin-top: 40px; /* Evita que o botão hamburger cubra o título */ }
+            
+            .data-item { flex-direction: column; align-items: flex-start; }
+            .data-item-left { width: 100%; margin-bottom: 5px; }
+            .data-item-right { width: 100%; justify-content: flex-start; }
+        }
     </style>
 </head>
 <body>
@@ -173,7 +200,7 @@
             <label for="file-upload" class="custom-file-upload">📂 Importar (CSV/Excel/JSON)</label>
             <input id="file-upload" type="file" accept=".csv, .xlsx, .xls, .json"/>
             
-            <button class="btn-action" onclick="exportVisiblePointsToJson()" style="background-color: #1976D2; width: 92%; margin: 0 auto; display: block;">💾 Exportar (JSON)</button>
+            <button class="btn-action" onclick="exportVisiblePointsToJson()" style="background-color: #1976D2; width: 93%; margin: 0 auto; display: block;">💾 Exportar (JSON)</button>
         </div>
 
         <div class="collapsible-section border-filter">
@@ -220,14 +247,14 @@
                 </div>
 
                 <div id="erb-controls" style="display: none; background: #2a2a2a; padding: 10px; border-radius: 4px; border-left: 3px solid var(--accent-color); margin-bottom: 10px;">
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <div class="filter-group" style="flex: 1; margin: 0;">
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <div class="filter-group" style="flex: 1; min-width: 80px; margin: 0;">
                             <label>Azimute:</label>
                             <input type="number" id="manual-azim" step="any" placeholder="Ex: 120" style="width: 100%;">
                         </div>
-                        <div class="filter-group" style="flex: 2; margin: 0;">
+                        <div class="filter-group" style="flex: 2; min-width: 120px; margin: 0;">
                             <label>Raio (m): <span id="radius-val" style="color: var(--accent-color); font-weight: bold;">1000</span></label>
-                            <input type="range" id="manual-radius" min="1000" max="5000" step="100" value="1000" oninput="document.getElementById('radius-val').innerText = this.value" style="width: 100%; cursor: pointer;">
+                            <input type="range" id="manual-radius" min="100" max="5000" step="100" value="1000" oninput="document.getElementById('radius-val').innerText = this.value" style="width: 100%; cursor: pointer;">
                         </div>
                     </div>
                 </div>
@@ -247,7 +274,7 @@
                     <button onclick="toggleAllPoints(false)" style="flex: 1; padding: 6px; background-color: #444; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: 0.2s;">☐ Desmarcar Todos</button>
                 </div>
 
-                <ul id="imported-data-list" style="list-style:none; padding:0; margin:0; max-height: 400px; overflow-y: auto;">
+                <ul id="imported-data-list" style="list-style:none; padding:0; margin:0; max-height: 400px; overflow-y: auto; overflow-x: hidden;">
                     <li style="color:#777; font-size:0.85rem; text-align:center;">Nenhum dado plotado no momento.</li>
                 </ul>
             </div>
@@ -284,6 +311,19 @@
             document.getElementById('sidebar').classList.toggle('collapsed');
             setTimeout(() => { map.invalidateSize(); }, 300);
         }
+
+        // Fecha o menu lateral no mobile caso o usuário clique na área do mapa
+        document.getElementById('map-container').addEventListener('click', function(e) {
+            if (window.innerWidth <= 768) {
+                const sidebar = document.getElementById('sidebar');
+                if (!sidebar.classList.contains('collapsed')) {
+                    if (!e.target.classList.contains('hamburger-btn')) {
+                        sidebar.classList.add('collapsed');
+                        setTimeout(() => { map.invalidateSize(); }, 300);
+                    }
+                }
+            }
+        });
 
         function toggleSection(contentId, iconId) {
             const content = document.getElementById(contentId);
@@ -360,14 +400,13 @@
                 if (fileObj.isPlotted) {
                     fileObj.filteredPoints.forEach(pt => {
                         const meta = pointMetadata[pt.id];
-                        // Filtra apenas pontos que estão renderizados (não deletados e marcados como visíveis)
                         if (meta && !meta.deleted && meta.visible) {
                             exportData.push({
                                 name: meta.name,
                                 lat: pt.lat,
                                 lon: pt.lon,
                                 azim: pt.azim,
-                                radius: pt.radius || 1000,
+                                radius: meta.radius || 1000,
                                 color: meta.color,
                                 timestamp: pt.timestamp
                             });
@@ -409,7 +448,6 @@
 
                 if (isNaN(lat) || isNaN(lon)) return;
 
-                // Usa o nome salvo como parte da assinatura para evitar duplicidade global
                 const signature = `${name}_${lat}_${lon}_${azim}`;
                 
                 if (globalUniqueSignatures.has(signature)) {
@@ -423,10 +461,11 @@
                     name: name,
                     visible: true,
                     deleted: false,
-                    color: color 
+                    color: color,
+                    radius: radius 
                 };
 
-                extractedPoints.push({ id: eventId, lat, lon, timestamp, azim, radius });
+                extractedPoints.push({ id: eventId, lat, lon, timestamp, azim });
             });
 
             if (extractedPoints.length === 0) {
@@ -486,7 +525,8 @@
                 name: name,
                 visible: true,
                 deleted: false,
-                color: color
+                color: color,
+                radius: radius
             };
 
             let manualFileObj = loadedFilesData.find(f => f.name === "📍 Pontos Manuais");
@@ -500,7 +540,7 @@
                 loadedFilesData.push(manualFileObj);
             }
 
-            manualFileObj.allPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim, radius });
+            manualFileObj.allPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim });
             manualFileObj.filteredPoints = manualFileObj.allPoints;
 
             updateFileListUI();
@@ -651,10 +691,11 @@
                         name: dateTimeRaw,
                         visible: true,
                         deleted: false,
-                        color: defaultColor 
+                        color: defaultColor,
+                        radius: 1000 
                     };
 
-                    extractedPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim, radius: 1000 });
+                    extractedPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim });
                 }
             });
 
@@ -777,6 +818,24 @@
                             redrawAllPlotted();
                         };
                         
+                        rightDiv.appendChild(colorInput);
+
+                        // Controle de Raio Inline apenas se for ERB
+                        if (pt.azim !== null && !isNaN(pt.azim)) {
+                            const radiusInput = document.createElement('input');
+                            radiusInput.type = 'number';
+                            radiusInput.className = 'inline-radius-picker';
+                            radiusInput.value = meta.radius || 1000;
+                            radiusInput.min = '100';
+                            radiusInput.step = '100';
+                            radiusInput.title = 'Editar Raio (m)';
+                            radiusInput.onchange = (e) => {
+                                meta.radius = parseInt(e.target.value, 10) || 1000;
+                                redrawAllPlotted();
+                            };
+                            rightDiv.appendChild(radiusInput);
+                        }
+                        
                         const editBtn = document.createElement('button');
                         editBtn.className = 'icon-btn'; editBtn.innerHTML = '✏️'; editBtn.title = "Editar Nome";
                         editBtn.onclick = () => editPointName(pt.id);
@@ -785,7 +844,6 @@
                         delBtn.className = 'icon-btn'; delBtn.innerHTML = '🗑️'; delBtn.title = "Remover Linha";
                         delBtn.onclick = () => openDeleteModal(pt.id);
 
-                        rightDiv.appendChild(colorInput);
                         rightDiv.appendChild(editBtn); 
                         rightDiv.appendChild(delBtn);
 
@@ -825,10 +883,11 @@
             activePoints.forEach(pt => {
                 const meta = pointMetadata[pt.id];
                 const ptColor = meta.color; 
+                const ptRadius = meta.radius || 1000; // Lê o raio dos metadados
                 
-                const key = `${pt.lat.toFixed(6)}_${pt.lon.toFixed(6)}_${pt.azim}_${ptColor}_${pt.radius}`;
+                const key = `${pt.lat.toFixed(6)}_${pt.lon.toFixed(6)}_${pt.azim}_${ptColor}_${ptRadius}`;
                 
-                if (!groups[key]) groups[key] = { lat: pt.lat, lon: pt.lon, azim: pt.azim, color: ptColor, radius: pt.radius, count: 0, names: [] };
+                if (!groups[key]) groups[key] = { lat: pt.lat, lon: pt.lon, azim: pt.azim, color: ptColor, radius: ptRadius, count: 0, names: [] };
                 groups[key].count++;
                 groups[key].names.push(meta.name);
             });
@@ -890,6 +949,7 @@
                         erbsLayer.addLayer(erbPolygon);
 
                         const endPoint = computeDestinationPoint(L.latLng(pt.lat, pt.lon), pt.radius, pt.azim);
+                        
                         erbsLayer.addLayer(L.polyline([[pt.lat, pt.lon], endPoint], { color: 'red', weight: 2, opacity: 0.8 }));
                         L.circleMarker([pt.lat, pt.lon], { radius: 3, color: '#000', fillColor: '#000', fillOpacity: 1 }).addTo(erbsLayer);
                     }
