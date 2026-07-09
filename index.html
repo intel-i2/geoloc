@@ -60,10 +60,11 @@
         input[type="file"] { display: none; }
         .custom-file-upload {
             display: inline-block; padding: 10px 20px; cursor: pointer;
-            background-color: #444; border-radius: 5px; transition: 0.3s; width: 80%;
-            margin-bottom: 10px;
+            background-color: #00695c; border-radius: 5px; transition: 0.3s; width: 94%;
+            margin-bottom: 10px; font-weight: bold; box-sizing: border-box; font-size: 0.8rem;
+			
         }
-        .custom-file-upload:hover { background-color: #555; }
+        .custom-file-upload:hover { background-color: #004d40; }
 
         /* --- Secções Retráteis --- */
         .collapsible-section { background-color: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
@@ -87,9 +88,33 @@
         .btn-action {
             width: 100%; padding: 10px; background-color: var(--filter-color);
             color: white; border: none; border-radius: 4px; cursor: pointer;
-            font-weight: bold; margin-top: 5px; transition: 0.3s;
+            font-weight: bold; margin-top: 5px; transition: 0.3s; box-sizing: border-box;
         }
         .btn-action:hover { background-color: #7B1FA2; }
+        
+        /* --- Botões de Código e Download (Refatorados do Inline) --- */
+        .btn-download {
+            background-color: #1976D2 !important;
+            width: 94%;
+            margin: 0 auto 10px auto !important; /* Margem inferior de 10px para separar dos botões de código */
+            display: block;
+        }
+        .btn-download:hover { background-color: #1565C0 !important; }
+        
+        .code-buttons-wrapper {
+            display: flex;
+            gap: 10px;
+            width: 94%;
+            margin: 0 auto;
+        }
+        .btn-code-generate, .btn-code-import {
+            background-color: #444 !important;
+            margin: 0 !important;
+            flex: 1;
+        }
+        .btn-code-generate:hover, .btn-code-import:hover {
+            background-color: #555 !important;
+        }
 
         /* --- Paleta de Cores Chips --- */
         .color-palette-container {
@@ -160,7 +185,7 @@
             background: #333; padding: 20px; border-radius: 8px; text-align: center;
             border: 1px solid #555; min-width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
-        .modal-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin: 5px; }
+        .modal-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: margin: 5px; }
         .btn-confirm-del { background: #f44336; color: white; }
         .btn-cancel { background: #555; color: white; }
 
@@ -170,6 +195,17 @@
             box-sizing: border-box; width: 90%; flex-wrap: wrap;
         }
         .radio-group label { margin: 0; cursor: pointer; display: flex; align-items: center; gap: 5px;}
+
+        /* --- Botões em Massa --- */
+        .mass-action-wrapper {
+            display: flex; gap: 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #444;
+        }
+        .btn-mass-action {
+            flex: 1; padding: 6px; background-color: #444; color: #fff; 
+            border: 1px solid #555; border-radius: 4px; cursor: pointer; 
+            font-size: 0.8rem; transition: 0.2s;
+        }
+        .btn-mass-action:hover { background-color: #555; }
 
         /* --- RESPONSIVIDADE PARA MOBILE --- */
         @media (max-width: 768px) {
@@ -183,7 +219,7 @@
                 transform: translateX(-100%);
                 width: 85%; padding-left: 20px; padding-right: 20px;
             }
-            #sidebar h2 { margin-top: 40px; /* Evita que o botão hamburger cubra o título */ }
+            #sidebar h2 { margin-top: 40px; }
             
             .data-item { flex-direction: column; align-items: flex-start; }
             .data-item-left { width: 100%; margin-bottom: 5px; }
@@ -194,13 +230,18 @@
 <body>
 
     <div id="sidebar">
-        <h2>Painel Analítico</h2>
+        <h2>Análise de Geolocalização</h2>
         
         <div class="file-upload-wrapper">
-            <label for="file-upload" class="custom-file-upload">📂 Importar (CSV/Excel/JSON)</label>
+            <label for="file-upload" class="custom-file-upload">📂 Importar (CSV / Excel / JSON)</label>
             <input id="file-upload" type="file" accept=".csv, .xlsx, .xls, .json"/>
             
-            <button class="btn-action" onclick="exportVisiblePointsToJson()" style="background-color: #1976D2; width: 94%; margin: 0 auto; display: block;">💾 Exportar (JSON)</button>
+            <button class="btn-action btn-download" onclick="exportVisiblePointsToJson()">💾 Baixar  (JSON)</button>
+            
+            <div class="code-buttons-wrapper">
+                <button class="btn-action btn-code-generate" onclick="generateShareCode()">🔗 Copiar </button>
+                <button class="btn-action btn-code-import" onclick="importShareCode()">📥 Colar </button>
+            </div>
         </div>
 
         <div class="collapsible-section border-filter">
@@ -253,8 +294,8 @@
                             <input type="number" id="manual-azim" step="any" placeholder="Ex: 120" style="width: 100%;">
                         </div>
                         <div class="filter-group" style="flex: 2; min-width: 120px; margin: 0;">
-                            <label>Raio (m): <span id="radius-val" style="color: var(--accent-color); font-weight: bold;">1000</span></label>
-                            <input type="range" id="manual-radius" min="100" max="5000" step="100" value="1000" oninput="document.getElementById('radius-val').innerText = this.value" style="width: 100%; cursor: pointer;">
+                            <label>Raio (m): <span id="radius-val" style="color: var(--accent-color); font-weight: bold;">2000</span></label>
+                            <input type="range" id="manual-radius" min="100" max="5000" step="100" value="2000" oninput="document.getElementById('radius-val').innerText = this.value" style="width: 100%; cursor: pointer;">
                         </div>
                     </div>
                 </div>
@@ -269,9 +310,9 @@
             </h3>
             <div id="data-content" class="section-content collapsed-content">
                 
-                <div style="display: flex; gap: 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #444;">
-                    <button onclick="toggleAllPoints(true)" style="flex: 1; padding: 6px; background-color: #444; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: 0.2s;">☑️ Marcar Todos</button>
-                    <button onclick="toggleAllPoints(false)" style="flex: 1; padding: 6px; background-color: #444; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: 0.2s;">☐ Desmarcar Todos</button>
+                <div class="mass-action-wrapper">
+                    <button class="btn-mass-action" onclick="toggleAllPoints(true)">☑️ Marcar Todos</button>
+                    <button class="btn-mass-action" onclick="toggleAllPoints(false)">☐ Desmarcar Todos</button>
                 </div>
 
                 <ul id="imported-data-list" style="list-style:none; padding:0; margin:0; max-height: 400px; overflow-y: auto; overflow-x: hidden;">
@@ -392,7 +433,88 @@
             return points;
         }
 
-        // --- EXPORTAR E IMPORTAR JSON LÓGICA ---
+        // --- EXPORTAR E IMPORTAR VIA CÓDIGO (BASE64) ---
+        function generateShareCode() {
+            let exportData = [];
+
+            loadedFilesData.forEach(fileObj => {
+                if (fileObj.isPlotted) {
+                    fileObj.filteredPoints.forEach(pt => {
+                        const meta = pointMetadata[pt.id];
+                        if (meta && !meta.deleted && meta.visible) {
+                            exportData.push({
+                                n: meta.name,
+                                la: pt.lat,
+                                lo: pt.lon,
+                                az: pt.azim,
+                                r: meta.radius || 2000,
+                                c: meta.color,
+                                t: pt.timestamp
+                            });
+                        }
+                    });
+                }
+            });
+
+            if (exportData.length === 0) {
+                alert("Nenhum ponto visível no mapa para gerar código.");
+                return;
+            }
+
+            try {
+                const jsonString = JSON.stringify(exportData);
+                const base64Code = btoa(encodeURIComponent(jsonString));
+                const finalCode = `OPMAP-${base64Code}`;
+
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(finalCode).then(() => {
+                        alert("✅ Código copiado para a área de transferência com sucesso!\n\nEnvie este código para sua equipe. Eles devem clicar em 'Colar Código' no sistema para visualizar os mesmos pontos.");
+                    }).catch(err => {
+                        prompt("Copie o código abaixo (Ctrl+C / Cmd+C):", finalCode);
+                    });
+                } else {
+                    prompt("Copie o código abaixo (Ctrl+C / Cmd+C):", finalCode);
+                }
+            } catch(e) {
+                alert("Erro ao gerar o código de compartilhamento.");
+            }
+        }
+
+        function importShareCode() {
+            const code = prompt("📥 Cole o código de compartilhamento (OPMAP-...) aqui:");
+            
+            if (!code || code.trim() === "") return;
+
+            try {
+                let cleanCode = code.trim();
+                if (cleanCode.startsWith('OPMAP-')) {
+                    cleanCode = cleanCode.replace('OPMAP-', '');
+                }
+
+                const jsonString = decodeURIComponent(atob(cleanCode));
+                const parsedData = JSON.parse(jsonString);
+
+                if (Array.isArray(parsedData)) {
+                    const mappedData = parsedData.map(item => ({
+                        name: item.n,
+                        lat: item.la,
+                        lon: item.lo,
+                        azim: item.az,
+                        radius: item.r,
+                        color: item.c,
+                        timestamp: item.t
+                    }));
+                    
+                    processJsonData("🔗 Dados Importados por Código", mappedData);
+                } else {
+                    alert("O código não contém dados válidos.");
+                }
+            } catch (e) {
+                alert("❌ Código inválido ou corrompido. Certifique-se de que copiou o texto inteiro e não alterou nenhum caractere.");
+            }
+        }
+
+        // --- EXPORTAR E IMPORTAR JSON (ARQUIVO FÍSICO) ---
         function exportVisiblePointsToJson() {
             let exportData = [];
 
@@ -406,7 +528,7 @@
                                 lat: pt.lat,
                                 lon: pt.lon,
                                 azim: pt.azim,
-                                radius: meta.radius || 1000,
+                                radius: meta.radius || 2000,
                                 color: meta.color,
                                 timestamp: pt.timestamp
                             });
@@ -441,7 +563,7 @@
                 const lat = parseFloat(item.lat);
                 const lon = parseFloat(item.lon);
                 const azim = item.azim !== null && item.azim !== undefined ? parseFloat(item.azim) : null;
-                const radius = item.radius ? parseInt(item.radius, 10) : 1000;
+                const radius = item.radius ? parseInt(item.radius, 10) : 2000;
                 const color = item.color || (azim !== null ? '#1e88e5' : '#e53935');
                 const name = item.name || 'Ponto Importado JSON';
                 const timestamp = item.timestamp || Date.now();
@@ -470,18 +592,19 @@
 
             if (extractedPoints.length === 0) {
                 if (duplicadosIgnorados > 0) {
-                    return alert(`Todos os ${duplicadosIgnorados} registros deste JSON já estão no mapa.`);
+                    return alert(`Todos os ${duplicadosIgnorados} registros já estão no mapa (Duplicados ignorados).`);
                 }
-                return alert("Nenhum dado válido processado no JSON.");
+                return alert("Nenhum dado válido processado.");
             }
 
             loadedFilesData.push({
                 id: ++fileCounter, name: fileName,
                 allPoints: extractedPoints, filteredPoints: extractedPoints,
-                layers: { heat: null, cluster: null, erbs: null }, isPlotted: false
+                layers: { heat: null, cluster: null, erbs: null }, isPlotted: true 
             });
             
             updateFileListUI();
+            redrawAllPlotted(true);
             alert(`${extractedPoints.length} pontos importados com sucesso!`);
         }
 
@@ -501,7 +624,7 @@
             const lat = parseFloat(latVal.replace(',', '.'));
             const lon = parseFloat(lonVal.replace(',', '.'));
             let azim = null;
-            let radius = 1000;
+            let radius = 2000;
 
             if (isErb) {
                 const azimVal = document.getElementById('manual-azim').value;
@@ -510,7 +633,7 @@
                     return;
                 }
                 azim = parseFloat(azimVal.replace(',', '.'));
-                radius = parseInt(document.getElementById('manual-radius').value, 10);
+                radius = parseInt(document.getElementById('manual-radius').value, 10) || 2000;
             }
 
             if (isNaN(lat) || isNaN(lon)) {
@@ -547,7 +670,7 @@
             redrawAllPlotted(true);
         }
 
-        // --- BUSCA DINÂMICA DE CABEÇALHO ---
+        // --- BUSCA DINÂMICA DE CABEÇALHO (Planilhas e CSV) ---
         function extractDataWithDynamicHeader(raw2DArray) {
             if (!raw2DArray || raw2DArray.length === 0) return null;
             let headerIndex = -1;
@@ -592,7 +715,7 @@
             return extractedData;
         }
 
-        // --- LEITURA DE ARQUIVOS ---
+        // --- LEITURA DE ARQUIVOS FÍSICOS ---
         document.getElementById('file-upload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -620,7 +743,7 @@
                     complete: function(results) {
                         if (results.data && results.data.length > 0) {
                             const jsonData = extractDataWithDynamicHeader(results.data);
-                            if (jsonData) { processRawData(file.name, jsonData); } 
+                            if (jsonData) { processRawDataFile(file.name, jsonData); } 
                             else { alert(`Não foi possível localizar as colunas de Latitude e Longitude no arquivo "${file.name}".`); }
                         }
                     }
@@ -634,7 +757,7 @@
                     
                     if (rawArray && rawArray.length > 0) {
                         const jsonData = extractDataWithDynamicHeader(rawArray);
-                        if (jsonData) { processRawData(file.name, jsonData); } 
+                        if (jsonData) { processRawDataFile(file.name, jsonData); } 
                         else { alert(`Não foi possível localizar as colunas de Latitude e Longitude no arquivo "${file.name}".`); }
                     }
                 };
@@ -643,7 +766,7 @@
             this.value = '';
         });
 
-        function processRawData(fileName, rawData) {
+        function processRawDataFile(fileName, rawData) {
             if (!rawData || rawData.length === 0) return;
 
             const normalizedData = rawData.map(row => {
@@ -692,7 +815,7 @@
                         visible: true,
                         deleted: false,
                         color: defaultColor,
-                        radius: 1000 
+                        radius: 2000 
                     };
 
                     extractedPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim });
@@ -820,17 +943,16 @@
                         
                         rightDiv.appendChild(colorInput);
 
-                        // Controle de Raio Inline apenas se for ERB
                         if (pt.azim !== null && !isNaN(pt.azim)) {
                             const radiusInput = document.createElement('input');
                             radiusInput.type = 'number';
                             radiusInput.className = 'inline-radius-picker';
-                            radiusInput.value = meta.radius || 1000;
+                            radiusInput.value = meta.radius || 2000;
                             radiusInput.min = '100';
                             radiusInput.step = '100';
                             radiusInput.title = 'Editar Raio (m)';
                             radiusInput.onchange = (e) => {
-                                meta.radius = parseInt(e.target.value, 10) || 1000;
+                                meta.radius = parseInt(e.target.value, 10) || 2000;
                                 redrawAllPlotted();
                             };
                             rightDiv.appendChild(radiusInput);
@@ -883,7 +1005,7 @@
             activePoints.forEach(pt => {
                 const meta = pointMetadata[pt.id];
                 const ptColor = meta.color; 
-                const ptRadius = meta.radius || 1000; // Lê o raio dos metadados
+                const ptRadius = meta.radius || 2000; 
                 
                 const key = `${pt.lat.toFixed(6)}_${pt.lon.toFixed(6)}_${pt.azim}_${ptColor}_${ptRadius}`;
                 
@@ -931,8 +1053,8 @@
                     
                     const marker = icon ? L.marker([pt.lat, pt.lon], {icon}) : L.circleMarker([pt.lat, pt.lon], {radius: 5, color: pt.color, fillOpacity: 0.8, weight: 1});
                     
-                    let popupText = `<strong>Registos:</strong><br>${displayNames}<br>Eventos: ${pt.count}`;
-                    if (pt.azim !== null && !isNaN(pt.azim)) popupText += ` - Raio: ${pt.radius}m`;
+                    let popupText = `<strong>Registos:</strong><br>${displayNames}<br><br>Eventos Ativos: ${pt.count}`;
+                    if (pt.azim !== null && !isNaN(pt.azim)) popupText += `<br>Azimute: ${pt.azim}° <br>Raio: ${pt.radius}m`;
                     marker.bindPopup(popupText);
                     
                     if (pt.azim === null || isNaN(pt.azim)) {
@@ -945,7 +1067,7 @@
                         const sectorPoints = createSector([pt.lat, pt.lon], pt.radius, pt.azim, beamwidth);
                         
                         const erbPolygon = L.polygon(sectorPoints, { stroke: false, fillColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: 1 });
-                        erbPolygon.bindPopup(`<strong>Setor da ERB</strong><br>Direção: ${pt.azim}°<br>Raio: ${pt.radius}m<br>Registos: ${pt.count}`);
+                        erbPolygon.bindPopup(`<strong>Setor da ERB</strong><br>Direção: ${pt.azim}°<br>Raio: ${pt.radius}m<br>Registos Ativos: ${pt.count}`);
                         erbsLayer.addLayer(erbPolygon);
 
                         const endPoint = computeDestinationPoint(L.latLng(pt.lat, pt.lon), pt.radius, pt.azim);
