@@ -92,7 +92,7 @@
         }
         .btn-action:hover { background-color: #7B1FA2; }
         
-        /* --- Botões de Código e Download conforme imagem anexada --- */
+        /* --- Estilo Corrigido da Div de Botões --- */
         .code-buttons-wrapper {
             display: flex;
             gap: 10px;
@@ -141,7 +141,7 @@
         .btn-remove { background-color: var(--remove-color); color: white; }
         .btn-remove:hover { background-color: #d32f2f; }
 
-        /* --- Lista de Dados Importados Individuais --- */
+        /* --- Lista de Dados Importados --- */
         .data-item {
             display: flex; align-items: center; justify-content: space-between;
             background-color: #2a2a2a; border: 1px solid #444; padding: 8px;
@@ -176,7 +176,7 @@
             border: 1px solid #555 !important; border-radius: 5px !important;
         }
 
-        /* --- Modais --- */
+        /* Modais e Grupos */
         #delete-modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center;
@@ -196,7 +196,6 @@
         }
         .radio-group label { margin: 0; cursor: pointer; display: flex; align-items: center; gap: 5px;}
 
-        /* --- Botões em Massa --- */
         .mass-action-wrapper {
             display: flex; gap: 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #444;
         }
@@ -207,20 +206,13 @@
         }
         .btn-mass-action:hover { background-color: #555; }
 
-        /* --- RESPONSIVIDADE PARA MOBILE --- */
         @media (max-width: 768px) {
             #sidebar {
-                position: absolute;
-                top: 0; left: 0; height: 100%;
-                width: 85%; max-width: 350px;
+                position: absolute; top: 0; left: 0; height: 100%; width: 85%; max-width: 350px;
                 transform: translateX(0);
             }
-            #sidebar.collapsed {
-                transform: translateX(-100%);
-                width: 85%; padding-left: 20px; padding-right: 20px;
-            }
+            #sidebar.collapsed { transform: translateX(-100%); width: 85%; padding-left: 20px; padding-right: 20px; }
             #sidebar h2 { margin-top: 40px; }
-            
             .data-item { flex-direction: column; align-items: flex-start; }
             .data-item-left { width: 100%; margin-bottom: 5px; }
             .data-item-right { width: 100%; justify-content: flex-start; }
@@ -237,12 +229,10 @@
             <input id="file-upload" type="file" accept=".csv, .xlsx, .xls, .json"/>
             <button class="btn-action btn-download" onclick="exportVisiblePointsToJson()">💾 Baixar  (JSON)</button>           
             
-			<div class="code-buttons-wrapper">
+            <div class="code-buttons-wrapper">
                 <button class="btn-action btn-code-generate" onclick="generateShareCode()">🔗 Copiar</button>
                 <button class="btn-action btn-code-import" onclick="importShareCode()">📥 Colar </button>
             </div>
-            
-
         </div>
 
         <div class="collapsible-section border-filter">
@@ -310,12 +300,10 @@
                 Dados Importados <span id="data-icon">▼</span>
             </h3>
             <div id="data-content" class="section-content collapsed-content">
-                
                 <div class="mass-action-wrapper">
                     <button class="btn-mass-action" onclick="toggleAllPoints(true)">☑️ Marcar Todos</button>
                     <button class="btn-mass-action" onclick="toggleAllPoints(false)">☐ Desmarcar Todos</button>
                 </div>
-
                 <ul id="imported-data-list" style="list-style:none; padding:0; margin:0; max-height: 400px; overflow-y: auto; overflow-x: hidden;">
                     <li style="color:#777; font-size:0.85rem; text-align:center;">Nenhum dado plotado no momento.</li>
                 </ul>
@@ -417,7 +405,6 @@
         let pointMetadata = {}; 
         const globalUniqueSignatures = new Set();
 
-        // --- FUNÇÕES MATEMÁTICAS (ERB) ---
         function computeDestinationPoint(start, distance, bearing) {
             const R = 6378137; const brng = bearing * Math.PI / 180;
             const lat1 = start.lat * Math.PI / 180; const lon1 = start.lng * Math.PI / 180;
@@ -476,12 +463,12 @@
 
                 if (navigator.clipboard && window.isSecureContext) {
                     navigator.clipboard.writeText(finalCode).then(() => {
-                        alert("✅ Código copiado para a área de transferência com sucesso!\n\nEnvie este código comprimido para a sua equipa.");
+                        alert("✅ Código copiado para a área de transferência!");
                     }).catch(err => {
-                        prompt("Copie o código abaixo (Ctrl+C / Cmd+C):", finalCode);
+                        prompt("Copie o código abaixo:", finalCode);
                     });
                 } else {
-                    prompt("Copie o código abaixo (Ctrl+C / Cmd+C):", finalCode);
+                    prompt("Copie o código abaixo:", finalCode);
                 }
             } catch(e) {
                 alert("Erro ao gerar o código de compartilhamento.");
@@ -523,11 +510,11 @@
                     alert("O código não contém dados válidos.");
                 }
             } catch (e) {
-                alert("❌ Código inválido ou corrompido. Certifique-se de que copiou o texto inteiro.");
+                alert("❌ Código inválido ou corrompido.");
             }
         }
 
-        // --- EXPORTAR JSON (ARQUIVO FÍSICO) ---
+        // --- EXPORTAR JSON ---
         function exportVisiblePointsToJson() {
             let exportData = [];
             loadedFilesData.forEach(fileObj => {
@@ -604,7 +591,7 @@
             redrawAllPlotted(true);
         }
 
-        // --- PONTO MANUAL LÓGICA ---
+        // --- ADICIONAR PONTO MANUAL ---
         function addManualPoint() {
             const nameInput = document.getElementById('manual-name').value.trim();
             const latVal = document.getElementById('manual-lat').value;
@@ -649,7 +636,7 @@
             redrawAllPlotted(true);
         }
 
-        // --- BUSCA DINÂMICA DE CABEÇALHO ---
+        // --- DETECÇÃO DE CABEÇALHOS EM ARQUIVOS ---
         function extractDataWithDynamicHeader(raw2DArray) {
             if (!raw2DArray || raw2DArray.length === 0) return null;
             let headerIndex = -1;
@@ -684,7 +671,7 @@
             return extractedData;
         }
 
-        // --- LEITURA DE ARQUIVOS FÍSICOS ---
+        // --- IMPORTAÇÃO DE ARQUIVOS FÍSICOS ---
         document.getElementById('file-upload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -696,7 +683,7 @@
                     try {
                         const parsedData = JSON.parse(event.target.result);
                         if (Array.isArray(parsedData)) { processJsonData(file.name, parsedData); } 
-                        else { alert("O arquivo JSON não está no formato esperado."); }
+                        else { alert("Formato incorreto do JSON."); }
                     } catch(err) { alert("Erro ao ler o arquivo JSON."); }
                 };
                 reader.readAsText(file);
@@ -708,7 +695,7 @@
                         if (results.data && results.data.length > 0) {
                             const jsonData = extractDataWithDynamicHeader(results.data);
                             if (jsonData) { processRawDataFile(file.name, jsonData); } 
-                            else { alert(`Colunas não localizadas em "${file.name}".`); }
+                            else { alert(`Colunas geográficas não localizadas em "${file.name}".`); }
                         }
                     }
                 });
@@ -721,7 +708,7 @@
                     if (rawArray && rawArray.length > 0) {
                         const jsonData = extractDataWithDynamicHeader(rawArray);
                         if (jsonData) { processRawDataFile(file.name, jsonData); } 
-                        else { alert(`Colunas não localizadas em "${file.name}".`); }
+                        else { alert(`Colunas geográficas não localizadas em "${file.name}".`); }
                     }
                 };
                 reader.readAsArrayBuffer(file);
@@ -775,7 +762,7 @@
             });
 
             if (extractedPoints.length === 0) {
-                if (duplicadosIgnorados > 0) { return alert("Todos os registros eram duplicados e já constam no mapa."); }
+                if (duplicadosIgnorados > 0) { return alert("Todos os registros eram duplicados."); }
                 return alert("Nenhuma coordenada válida processada.");
             }
 
@@ -943,36 +930,37 @@
                 const beamwidth = 120; 
 
                 aggregatedData.forEach(pt => {
-                    // O primeiro elemento do array representa o registro mais recente/superior da relação
                     let latestRecord = pt.names[0] || 'Data Oculta';
-                    let displayNames = pt.names.length > 3 
-                        ? `${pt.names[0]}<br>${pt.names[1]}<br><em>... e mais ${pt.names.length - 2} registos</em>` 
-                        : pt.names.join('<br>');
 
                     const icon = pt.count > 1 ? L.divIcon({ className: 'count-icon', html: pt.count, iconSize: [30,30], iconAnchor: [15,15] }) : null;
                     const marker = icon ? L.marker([pt.lat, pt.lon], {icon}) : L.circleMarker([pt.lat, pt.lon], {radius: 5, color: pt.color, fillOpacity: 0.8, weight: 1});
                     
-                    // Modificação da legenda: apenas o último registro com o layout solicitado
+                    // Configuração do Popup padrão simplificado para cliques
                     let popupText = `<strong>Último registro:</strong><br>${latestRecord}`;
                     if (pt.azim !== null && !isNaN(pt.azim)) {
                         popupText += `<br><small>Direção: ${pt.azim}° | Raio: ${pt.radius}m</small>`;
                     } else {
-                        popupText += `<br><small>Eventos ativos agrupados neste ponto: ${pt.count}</small>`;
+                        popupText += `<br><small>Eventos ativos agrupados: ${pt.count}</small>`;
                     }
                     
                     marker.bindPopup(popupText);
                     
+                    // CORREÇÃO: Rótulos fixados e SEMPRE VISÍVEIS (permanent: true) para pontos normais (não ERB)
                     if (pt.azim === null || isNaN(pt.azim)) {
-                        marker.bindTooltip(`<b>${latestRecord}</b>`, { permanent: false, direction: 'top', offset: [0, -5] });
+                        marker.bindTooltip(`<b>${latestRecord}</b>`, { 
+                            permanent: true, 
+                            direction: 'top', 
+                            offset: [0, -5] 
+                        });
                     }
                     
                     markers.addLayer(marker);
 
+                    // Tratamento específico de ERB (Antenas)
                     if (pt.azim !== null && !isNaN(pt.azim)) {
                         const sectorPoints = createSector([pt.lat, pt.lon], pt.radius, pt.azim, beamwidth);
                         const erbPolygon = L.polygon(sectorPoints, { stroke: false, fillColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: 1 });
                         
-                        // Sincronização do popup do setor para mostrar apenas o último registro
                         erbPolygon.bindPopup(`<strong>Último registro:</strong><br>${latestRecord}<br><small>Direção: ${pt.azim}° | Raio: ${pt.radius}m</small>`);
                         erbsLayer.addLayer(erbPolygon);
 
