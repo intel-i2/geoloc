@@ -146,6 +146,8 @@
             display: flex; align-items: center; justify-content: space-between;
             background-color: #2a2a2a; border: 1px solid #444; padding: 8px;
             margin-bottom: 5px; border-radius: 4px; gap: 8px;
+            content-visibility: auto;
+            contain-intrinsic-size: auto 42px;
         }
         .data-item-left { display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1; }
         .data-item-name { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -401,9 +403,71 @@
 
         // --- DADOS E METADADOS ---
         let fileCounter = 0;
+        let pointCounter = 0;
         let loadedFilesData = [];
         let pointMetadata = {}; 
         const globalUniqueSignatures = new Set();
+
+        function parseCoordinate(val) {
+            if (typeof val === 'number') return val;
+            if (val === undefined || val === null || val === '') return NaN;
+            return parseFloat(String(val).replace(',', '.'));
+        }
+
+        function cleanString(str) {
+            if (str === undefined || str === null) return '';
+            return String(str)
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toLowerCase();
+        }
+
+        function formatDateTimeValue(dateStr, horaStr) {
+            let formattedDate = String(dateStr || '').trim();
+            let formattedTime = String(horaStr || '').trim();
+            if (formattedDate && formattedDate.length === 8 && /^\d+$/.test(formattedDate)) {
+                formattedDate = formattedDate.substring(0, 2) + '/' + formattedDate.substring(2, 4) + '/' + formattedDate.substring(4, 8);
+            }
+            if (formattedTime && formattedTime.length === 6 && /^\d+$/.test(formattedTime)) {
+                formattedTime = formattedTime.substring(0, 2) + ':' + formattedTime.substring(2, 4) + ':' + formattedTime.substring(4, 6);
+            }
+            let result = '';
+            if (formattedDate) result += formattedDate;
+            if (formattedTime) result += (result ? ' ' : '') + formattedTime;
+            return result;
+        }
+
+        function parseDMS(dmsStr) {
+            if (!dmsStr) return NaN;
+            const cleaned = String(dmsStr).replace(',', '.').trim();
+            const isNegative = cleaned.startsWith('-');
+            const absoluteStr = isNegative ? cleaned.substring(1) : cleaned;
+            const parts = absoluteStr.split(/[-/\s_]+/).map(p => parseFloat(p)).filter(p => !isNaN(p));
+            if (parts.length === 0) return NaN;
+            let decimal = parts[0];
+            if (parts.length > 1) {
+                decimal += parts[1] / 60;
+            }
+            if (parts.length > 2) {
+                decimal += parts[2] / 3600;
+            }
+            return isNegative ? -decimal : decimal;
+        }
+
+        function extractCoordinatesFromAddress(addressStr) {
+            if (!addressStr) return null;
+            const lower = String(addressStr).toLowerCase();
+            const latMatch = lower.match(/latitude\s+([-\d,]+)/);
+            const lonMatch = lower.match(/longitude\s+([-\d,]+)/);
+            const azimMatch = lower.match(/azimute\s+(\d+)/);
+            if (!latMatch || !lonMatch) return null;
+            const lat = parseDMS(latMatch[1]);
+            const lon = parseDMS(lonMatch[1]);
+            const azim = azimMatch ? parseFloat(azimMatch[1]) : null;
+            if (isNaN(lat) || isNaN(lon)) return null;
+            return { lat, lon, azim };
+        }
 
         function computeDestinationPoint(start, distance, bearing) {
             const R = 6378137; const brng = bearing * Math.PI / 180;
@@ -414,9 +478,10 @@
         }
         function createSector(center, radius, azimuth, beamwidth) {
             const points = [center];
+            const startLatLng = { lat: center[0], lng: center[1] };
             for (let i = 0; i <= 50; i++) {
                 const angle = (azimuth - beamwidth / 2) + (i * beamwidth / 50);
-                points.push(computeDestinationPoint(L.latLng(center[0], center[1]), radius, angle));
+                points.push(computeDestinationPoint(startLatLng, radius, angle));
             }
             return points;
         }
@@ -558,10 +623,10 @@
             let duplicadosIgnorados = 0;
 
             jsonData.forEach(item => {
-                const lat = parseFloat(item.lat);
-                const lon = parseFloat(item.lon);
-                const azim = item.azim !== null && item.azim !== undefined ? parseFloat(item.azim) : null;
-                const radius = item.radius ? parseInt(item.radius, 10) : 2000;
+                const lat = typeof item.lat === 'number' ? item.lat : parseFloat(item.lat);
+                const lon = typeof item.lon === 'number' ? item.lon : parseFloat(item.lon);
+                const azim = item.azim !== null && item.azim !== undefined ? (typeof item.azim === 'number' ? item.azim : parseFloat(item.azim)) : null;
+                const radius = item.radius ? (typeof item.radius === 'number' ? item.radius : parseInt(item.radius, 10)) : 2000;
                 const color = item.color || (azim !== null ? '#1e88e5' : '#e53935');
                 const name = item.name || 'Ponto Importado JSON';
                 const timestamp = item.timestamp || Date.now();
@@ -572,7 +637,7 @@
                 if (globalUniqueSignatures.has(signature)) { duplicadosIgnorados++; return; }
                 globalUniqueSignatures.add(signature);
 
-                const eventId = 'evt_' + Math.random().toString(36).substr(2, 9) + Date.now();
+                const eventId = 'evt_' + (++pointCounter);
                 pointMetadata[eventId] = { name: name, visible: true, deleted: false, color: color, radius: radius };
                 extractedPoints.push({ id: eventId, lat, lon, timestamp, azim });
             });
@@ -601,22 +666,22 @@
 
             if (!latVal || !lonVal) { alert("Latitude e Longitude são obrigatórios."); return; }
 
-            const lat = parseFloat(latVal.replace(',', '.'));
-            const lon = parseFloat(lonVal.replace(',', '.'));
+            const lat = parseCoordinate(latVal);
+            const lon = parseCoordinate(lonVal);
             let azim = null;
             let radius = 2000;
 
             if (isErb) {
                 const azimVal = document.getElementById('manual-azim').value;
                 if (azimVal === '') { alert("Por favor, defina um Azimute para a ERB."); return; }
-                azim = parseFloat(azimVal.replace(',', '.'));
+                azim = parseCoordinate(azimVal);
                 radius = parseInt(document.getElementById('manual-radius').value, 10) || 2000;
             }
 
             if (isNaN(lat) || isNaN(lon)) { alert("Coordenadas inválidas."); return; }
 
             const name = nameInput !== "" ? nameInput : (isErb ? 'ERB Manual' : 'Ponto Manual');
-            const eventId = 'man_' + Math.random().toString(36).substr(2, 9) + Date.now();
+            const eventId = 'man_' + (++pointCounter);
             
             pointMetadata[eventId] = { name: name, visible: true, deleted: false, color: color, radius: radius };
             let manualFileObj = loadedFilesData.find(f => f.name === "📍 Pontos Manuais");
@@ -645,10 +710,12 @@
             for (let i = 0; i < raw2DArray.length; i++) {
                 const row = raw2DArray[i];
                 if (!row || !Array.isArray(row)) continue;
-                const rowStrings = row.map(cell => String(cell).toLowerCase().trim());
+                const rowStrings = row.map(cell => cleanString(cell));
                 const temLat = rowStrings.some(str => str.includes('latitude') || str === 'lat');
                 const temLon = rowStrings.some(str => str.includes('longitude') || str === 'lon' || str === 'lng');
-                if (temLat && temLon) { headerIndex = i; headers = row.map(cell => cell ? String(cell) : ""); break; }
+                const temEndereco = rowStrings.some(str => str.includes('endereco'));
+                const temCgi = rowStrings.some(str => str.includes('cgi') || str.includes('erb') || str.includes('celula'));
+                if ((temLat && temLon) || temEndereco || temCgi) { headerIndex = i; headers = row.map(cell => cell ? String(cell) : ""); break; }
             }
 
             if (headerIndex === -1) return null;
@@ -660,11 +727,9 @@
                 const obj = {};
                 let isRowEmpty = true;
                 for (let j = 0; j < headers.length; j++) {
-                    const colName = headers[j];
-                    if (colName) {
-                        obj[colName] = row[j];
-                        if (row[j] !== undefined && row[j] !== null && String(row[j]).trim() !== "") { isRowEmpty = false; }
-                    }
+                    const colName = headers[j] ? String(headers[j]).trim() : ('_col_' + j);
+                    obj[colName] = row[j];
+                    if (row[j] !== undefined && row[j] !== null && String(row[j]).trim() !== "") { isRowEmpty = false; }
                 }
                 if (!isRowEmpty) { extractedData.push(obj); }
             }
@@ -704,11 +769,119 @@
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-                    const rawArray = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
+                    
+                    // Recalcula o range (dimensão) de cada aba no workbook
+                    workbook.SheetNames.forEach(name => {
+                        const ws = workbook.Sheets[name];
+                        if (ws) {
+                            const range = { s: { r: Infinity, c: Infinity }, e: { r: 0, c: 0 } };
+                            let hasCells = false;
+                            Object.keys(ws).forEach(x => {
+                                if (x[0] !== "!") {
+                                    hasCells = true;
+                                    const decoded = XLSX.utils.decode_cell(x);
+                                    range.s.c = Math.min(range.s.c, decoded.c);
+                                    range.s.r = Math.min(range.s.r, decoded.r);
+                                    range.e.c = Math.max(range.e.c, decoded.c);
+                                    range.e.r = Math.max(range.e.r, decoded.r);
+                                }
+                            });
+                            if (hasCells) {
+                                ws['!ref'] = XLSX.utils.encode_range(range);
+                            }
+                        }
+                    });
+
+                    // Verifica se há alguma aba de antenas para gerar o cgiMap
+                    const antennaSheetName = workbook.SheetNames.find(name => {
+                        const l = cleanString(name);
+                        return l.includes('antena') || l.includes('erb');
+                    });
+                    
+                    let cgiMap = {};
+                    if (antennaSheetName) {
+                        const wsAntena = workbook.Sheets[antennaSheetName];
+                        const rawArrayAntena = XLSX.utils.sheet_to_json(wsAntena, {header: 1, defval: ""});
+                        
+                        let headerIndex = -1;
+                        let headers = [];
+                        for (let i = 0; i < rawArrayAntena.length; i++) {
+                            const row = rawArrayAntena[i];
+                            if (!row || !Array.isArray(row)) continue;
+                            const rowStrings = row.map(cell => cleanString(cell));
+                            const temCgi = rowStrings.some(str => str.includes('cgi') || str.includes('erb'));
+                            const temLat = rowStrings.some(str => str.includes('latitude') || str === 'lat');
+                            if (temCgi && temLat) { headerIndex = i; headers = row.map(cell => cell ? String(cell) : ""); break; }
+                        }
+                        
+                        if (headerIndex !== -1) {
+                            for (let i = headerIndex + 1; i < rawArrayAntena.length; i++) {
+                                const row = rawArrayAntena[i];
+                                if (!row || row.length === 0) continue;
+                                let cgiCode = '';
+                                let latVal = undefined;
+                                let lonVal = undefined;
+                                let azimVal = null;
+                                
+                                for (let j = 0; j < headers.length; j++) {
+                                    const colName = cleanString(headers[j]);
+                                    const val = row[j];
+                                    if (colName === 'cgi/erb' || colName === 'cgi' || colName === 'erb') {
+                                        cgiCode = String(val || '').trim();
+                                    } else if (colName === 'latitude') {
+                                        latVal = val;
+                                    } else if (colName === 'longitude') {
+                                        lonVal = val;
+                                    } else if (colName === 'azimute' || colName === 'azimuth') {
+                                        azimVal = val;
+                                    }
+                                }
+                                
+                                if (cgiCode && latVal !== undefined && lonVal !== undefined) {
+                                    const lat = parseCoordinate(latVal);
+                                    const lon = parseCoordinate(lonVal);
+                                    const azim = azimVal !== null && azimVal !== '' ? parseCoordinate(azimVal) : null;
+                                    if (!isNaN(lat) && !isNaN(lon)) {
+                                        cgiMap[cgiCode] = { lat, lon, azim };
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Encontra a melhor aba de dados/conexões para processar
+                    // 1. Prioridade máxima: Abas de conexões ou extratos
+                    let targetSheetName = workbook.SheetNames.find(name => {
+                        const l = cleanString(name);
+                        return l.includes('extrato conexoes') || l.includes('conexoes') || l.includes('trafego');
+                    });
+                    
+                    // 2. Prioridade média: Abas de eventos ou chamadas (mas ignorando portabilidade que é vazia)
+                    if (!targetSheetName) {
+                        targetSheetName = workbook.SheetNames.find(name => {
+                            const l = cleanString(name);
+                            return (l.includes('eventos') || l.includes('chamadas')) && !l.includes('portabilidade');
+                        });
+                    }
+                    
+                    // 3. Fallback: Qualquer aba que não seja de antenas, pesquisa ou portabilidade
+                    if (!targetSheetName) {
+                        targetSheetName = workbook.SheetNames.find(name => {
+                            const l = cleanString(name);
+                            return !l.includes('antena') && !l.includes('erb') && !l.includes('pesquisa') && !l.includes('portabilidade');
+                        }) || workbook.SheetNames[0];
+                    }
+                    
+                    const sheet = workbook.Sheets[targetSheetName];
+                    const rawArray = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ""});
                     if (rawArray && rawArray.length > 0) {
                         const jsonData = extractDataWithDynamicHeader(rawArray);
-                        if (jsonData) { processRawDataFile(file.name, jsonData); } 
-                        else { alert(`Colunas geográficas não localizadas em "${file.name}".`); }
+                        if (jsonData) { 
+                            processRawDataFile(file.name, jsonData, cgiMap); 
+                        } 
+                        else { 
+                            alert(`Colunas geográficas não localizadas em "${file.name}".`); 
+                        }
                     }
                 };
                 reader.readAsArrayBuffer(file);
@@ -716,49 +889,107 @@
             this.value = '';
         });
 
-        function processRawDataFile(fileName, rawData) {
+        function processRawDataFile(fileName, rawData, cgiMap = {}) {
             if (!rawData || rawData.length === 0) return;
-            const normalizedData = rawData.map(row => {
-                const newRow = {};
-                Object.keys(row).forEach(key => { newRow[String(key).replace(/^\uFEFF/, '').trim().toLowerCase()] = row[key]; });
-                return newRow;
-            });
 
             const extractedPoints = [];
             let duplicadosIgnorados = 0;
 
-            normalizedData.forEach(row => {
-                const latVal = row['latitude']; const lonVal = row['longitude'];
-                const azimVal = row['azimute'] !== undefined ? row['azimute'] : (row['azimuth'] !== undefined ? row['azimuth'] : null);
+            rawData.forEach(row => {
+                let latVal = undefined;
+                let lonVal = undefined;
+                let azimVal = null;
+                let dataStr = '';
+                let horaStr = '';
+                let fallbackDateTime = '';
+                let col4Val = '';
+                let enderecoVal = '';
+
+                for (const key in row) {
+                    if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+                    const normKey = cleanString(key);
+                    const val = row[key];
+                    if (normKey === 'latitude') {
+                        if (latVal === undefined) latVal = val;
+                    } else if (normKey === 'latitude_rs' || normKey.includes('latitude_rs') || normKey === 'latitude rs') {
+                        latVal = val;
+                    } else if (normKey === 'latitude_re' || normKey.includes('latitude_re') || normKey === 'latitude re') {
+                        if (latVal === undefined) latVal = val;
+                    }
+                    else if (normKey === 'longitude') {
+                        if (lonVal === undefined) lonVal = val;
+                    } else if (normKey === 'longitude_rs' || normKey.includes('longitude_rs') || normKey === 'longitude rs') {
+                        lonVal = val;
+                    } else if (normKey === 'longitude_re' || normKey.includes('longitude_re') || normKey === 'longitude re') {
+                        if (lonVal === undefined) lonVal = val;
+                    }
+                    else if (normKey === 'azimute' || normKey === 'azimuth') {
+                        if (azimVal === null) azimVal = val;
+                    } else if (normKey === 'azimute_rs' || normKey === 'azimuth_rs' || normKey.includes('azimute_rs') || normKey.includes('azimuth_rs') || normKey === 'azimute rs' || normKey === 'azimuth rs') {
+                        azimVal = val;
+                    } else if (normKey === 'azimute_re' || normKey === 'azimuth_re' || normKey.includes('azimute_re') || normKey.includes('azimuth_re') || normKey === 'azimute re' || normKey === 'azimuth re') {
+                        if (azimVal === null) azimVal = val;
+                    }
+                    else if (normKey === 'data do evento' || normKey === 'data evento' || normKey === 'data' || normKey === 'data_evento' || normKey === 'data ini' || normKey === 'data_ini' || normKey === 'data_inicio' || normKey === 'data inicio') dataStr = val;
+                    else if (normKey === 'hora do evento' || normKey === 'hora evento' || normKey === 'hora' || normKey === 'hora_evento' || normKey === 'hora ini' || normKey === 'hora_ini' || normKey === 'hora_inicio' || normKey === 'hora inicio') horaStr = val;
+                    else if (normKey === 'data e hora' || normKey === 'data hora' || normKey === 'timestamp' || normKey === 'inicio' || normKey === 'data inicio' || normKey === 'hora local (fim)' || normKey === 'hora local (inicio)') fallbackDateTime = val;
+                    else if (normKey === '_col_4') col4Val = val;
+                    else if (normKey === 'endereco final' || normKey === 'endereco inicial' || normKey === 'endereco inicial ') {
+                        if (val && cleanString(val).includes('latitude') && cleanString(val).includes('longitude')) {
+                            enderecoVal = val;
+                        }
+                    }
+                }
+
+                if ((latVal === undefined || latVal === null || latVal === '') && enderecoVal) {
+                    const coords = extractCoordinatesFromAddress(enderecoVal);
+                    if (coords) {
+                        latVal = coords.lat;
+                        lonVal = coords.lon;
+                        if (azimVal === null || azimVal === '') azimVal = coords.azim;
+                    }
+                }
+
+                if (latVal === undefined || latVal === null || latVal === '') {
+                    let cgiCode = '';
+                    for (const key in row) {
+                        if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+                        const normKey = cleanString(key);
+                        if (normKey === 'ultima cgi/erb' || normKey === 'primeira cgi/erb' || normKey === 'cgi/erb' || normKey === 'cgi' || normKey === 'erb') {
+                            cgiCode = String(row[key] || '').trim();
+                            break;
+                        }
+                    }
+                    if (cgiCode && cgiMap && cgiMap[cgiCode]) {
+                        latVal = cgiMap[cgiCode].lat;
+                        lonVal = cgiMap[cgiCode].lon;
+                        if (azimVal === null || azimVal === '') azimVal = cgiMap[cgiCode].azim;
+                    }
+                }
 
                 if (latVal === undefined || latVal === null || latVal === '' || lonVal === undefined || lonVal === null || lonVal === '') return;
 
-                const lat = parseFloat(String(latVal).replace(',', '.'));
-                const lon = parseFloat(String(lonVal).replace(',', '.'));
-                let azim = azimVal !== null && azimVal !== '' ? parseFloat(String(azimVal).replace(',', '.')) : null;
-                
-                let dataStr = row['data do evento'] || row['data evento'] || row['data'] || row['data_evento'] || '';
-                let horaStr = row['hora do evento'] || row['hora evento'] || row['hora'] || row['hora_evento'] || '';
-                
-                let dateTimeRaw = '';
-                if (dataStr) dateTimeRaw += dataStr;
-                if (horaStr) dateTimeRaw += (dateTimeRaw ? ' ' : '') + horaStr;
+                const lat = parseCoordinate(latVal);
+                const lon = parseCoordinate(lonVal);
+                const azim = azimVal !== null && azimVal !== '' ? parseCoordinate(azimVal) : null;
+
+                if (isNaN(lat) || isNaN(lon)) return;
+
+                let dateTimeRaw = formatDateTimeValue(dataStr, horaStr);
 
                 if (!dateTimeRaw) {
-                    dateTimeRaw = row['data e hora'] || row['data hora'] || row['timestamp'] || 'Data Oculta';
+                    dateTimeRaw = fallbackDateTime || col4Val || 'Data Oculta';
                 }
 
                 const signature = `${dateTimeRaw}_${lat}_${lon}_${azim}`;
                 if (globalUniqueSignatures.has(signature)) { duplicadosIgnorados++; return; }
                 globalUniqueSignatures.add(signature);
 
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    const eventId = 'evt_' + Math.random().toString(36).substr(2, 9) + Date.now();
-                    const defaultColor = (azim !== null && !isNaN(azim)) ? '#1e88e5' : '#e53935';
+                const eventId = 'evt_' + (++pointCounter);
+                const defaultColor = (azim !== null && !isNaN(azim)) ? '#1e88e5' : '#e53935';
 
-                    pointMetadata[eventId] = { name: dateTimeRaw, visible: true, deleted: false, color: defaultColor, radius: 2000 };
-                    extractedPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim });
-                }
+                pointMetadata[eventId] = { name: dateTimeRaw, visible: true, deleted: false, color: defaultColor, radius: 2000 };
+                extractedPoints.push({ id: eventId, lat, lon, timestamp: Date.now(), azim });
             });
 
             if (extractedPoints.length === 0) {
@@ -810,8 +1041,13 @@
 
         function updateFileListUI() {
             const list = document.getElementById('file-list');
-            list.innerHTML = loadedFilesData.length === 0 ? '<li style="color:#777;font-style:italic;">Nenhum ficheiro.</li>' : '';
+            list.innerHTML = '';
+            if (loadedFilesData.length === 0) {
+                list.innerHTML = '<li style="color:#777;font-style:italic;">Nenhum ficheiro.</li>';
+                return;
+            }
 
+            const fragment = document.createDocumentFragment();
             loadedFilesData.forEach(fileObj => {
                 const li = document.createElement('li'); li.className = 'file-item';
                 const countText = `${fileObj.allPoints.length} eventos`;
@@ -822,20 +1058,22 @@
                 btn.innerText = fileObj.isPlotted ? 'Remover' : 'Plotar';
                 btn.onclick = function() { togglePlotFile(fileObj, this); };
                 
-                li.appendChild(btn); list.appendChild(li);
+                li.appendChild(btn); fragment.appendChild(li);
             });
+            list.appendChild(fragment);
         }
 
         function updateImportedDataUI() {
             const list = document.getElementById('imported-data-list');
             list.innerHTML = '';
             let hasPlottedData = false;
+            const fragment = document.createDocumentFragment();
 
             loadedFilesData.forEach(fileObj => {
-                if(fileObj.isPlotted) {
+                if (fileObj.isPlotted) {
                     fileObj.filteredPoints.forEach(pt => {
                         const meta = pointMetadata[pt.id];
-                        if(!meta || meta.deleted) return; 
+                        if (!meta || meta.deleted) return; 
                         hasPlottedData = true;
 
                         const li = document.createElement('li'); li.className = 'data-item';
@@ -866,13 +1104,15 @@
 
                         rightDiv.appendChild(editBtn); rightDiv.appendChild(delBtn);
                         li.appendChild(leftDiv); li.appendChild(rightDiv);
-                        list.appendChild(li);
+                        fragment.appendChild(li);
                     });
                 }
             });
 
             if (!hasPlottedData) {
                 list.innerHTML = '<li style="color:#777; font-size:0.85rem; text-align:center;">Nenhum dado plotado no momento.</li>';
+            } else {
+                list.appendChild(fragment);
             }
         }
 
@@ -893,7 +1133,9 @@
                 const meta = pointMetadata[pt.id];
                 const ptColor = meta.color; 
                 const ptRadius = meta.radius || 2000; 
-                const key = `${pt.lat.toFixed(6)}_${pt.lon.toFixed(6)}_${pt.azim}_${ptColor}_${ptRadius}`;
+                const latKey = Math.round(pt.lat * 1000000);
+                const lonKey = Math.round(pt.lon * 1000000);
+                const key = `${latKey}_${lonKey}_${pt.azim}_${ptColor}_${ptRadius}`;
                 
                 if (!groups[key]) groups[key] = { lat: pt.lat, lon: pt.lon, azim: pt.azim, color: ptColor, radius: ptRadius, count: 0, names: [] };
                 groups[key].count++;
@@ -964,7 +1206,7 @@
                         erbPolygon.bindPopup(`<strong>Último registro:</strong><br>${latestRecord}<br><small>Direção: ${pt.azim}° | Raio: ${pt.radius}m</small>`);
                         erbsLayer.addLayer(erbPolygon);
 
-                        const endPoint = computeDestinationPoint(L.latLng(pt.lat, pt.lon), pt.radius, pt.azim);
+                        const endPoint = computeDestinationPoint({ lat: pt.lat, lng: pt.lon }, pt.radius, pt.azim);
                         erbsLayer.addLayer(L.polyline([[pt.lat, pt.lon], endPoint], { color: 'red', weight: 2, opacity: 0.8 }));
                         L.circleMarker([pt.lat, pt.lon], { radius: 3, color: '#000', fillColor: '#000', fillOpacity: 1 }).addTo(erbsLayer);
                     }
