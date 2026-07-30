@@ -179,7 +179,7 @@
         }
 
         /* Modais e Grupos */
-        #delete-modal {
+        #delete-modal, #edit-modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center;
         }
@@ -187,9 +187,49 @@
             background: #333; padding: 20px; border-radius: 8px; text-align: center;
             border: 1px solid #555; min-width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
+        .edit-modal-content {
+            background: #2a2a2a; color: #eee; padding: 20px; border-radius: 8px; text-align: left;
+            border: 1px solid #555; width: 90%; max-width: 420px; box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        }
+        .edit-field-group {
+            margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px;
+        }
+        .edit-field-group label {
+            font-size: 0.82rem; color: #bbb; font-weight: bold;
+        }
+        .edit-field-row {
+            display: flex; gap: 10px;
+        }
+        .edit-field-row .edit-field-group {
+            flex: 1;
+        }
+        .modal-input {
+            background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 8px 10px;
+            border-radius: 4px; font-size: 0.9rem; width: 100%; box-sizing: border-box;
+        }
+        .modal-input:focus {
+            border-color: #1e88e5; outline: none;
+        }
         .modal-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin: 5px; }
         .btn-confirm-del { background: #f44336; color: white; }
+        .btn-confirm-save { background: #1e88e5; color: white; }
+        .btn-confirm-save:hover { background: #1565c0; }
         .btn-cancel { background: #555; color: white; }
+
+        .data-item-info {
+            display: flex; flex-direction: column; overflow: hidden; justify-content: center;
+        }
+        .data-item-coords {
+            font-size: 0.75rem; color: #aaa; font-family: monospace; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+        }
+        .popup-copy-btn {
+            margin-top: 6px; padding: 4px 8px; background: #333; color: #4fc3f7; border: 1px solid #555;
+            border-radius: 4px; cursor: pointer; font-size: 0.78rem; font-weight: bold; width: 100%;
+            transition: background 0.2s, color 0.2s;
+        }
+        .popup-copy-btn:hover {
+            background: #444; color: #fff;
+        }
 
         .radio-group {
             background: #222; padding: 10px; border-radius: 4px; 
@@ -331,6 +371,42 @@
         </div>
     </div>
 
+    <div id="edit-modal">
+        <div class="modal-content edit-modal-content">
+            <h3 style="margin-top:0; color:#fff; font-size:1.1rem; border-bottom:1px solid #444; padding-bottom:8px;">✏️ Editar Registro</h3>
+            <div class="edit-field-group">
+                <label for="edit-name">Nome / Identificação:</label>
+                <input type="text" id="edit-name" class="modal-input" placeholder="Nome do evento/registro">
+            </div>
+            <div class="edit-field-row">
+                <div class="edit-field-group">
+                    <label for="edit-lat">Latitude:</label>
+                    <input type="number" step="any" id="edit-lat" class="modal-input" placeholder="-22.889656">
+                </div>
+                <div class="edit-field-group">
+                    <label for="edit-lon">Longitude:</label>
+                    <input type="number" step="any" id="edit-lon" class="modal-input" placeholder="-47.227439">
+                </div>
+            </div>
+            <div id="edit-erb-fields" style="display:none;">
+                <div class="edit-field-row">
+                    <div class="edit-field-group">
+                        <label for="edit-azim">Azimute (°):</label>
+                        <input type="number" step="any" id="edit-azim" class="modal-input" placeholder="180">
+                    </div>
+                    <div class="edit-field-group">
+                        <label for="edit-radius">Raio (m):</label>
+                        <input type="number" step="100" min="100" id="edit-radius" class="modal-input" placeholder="2000">
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 15px; text-align: right;">
+                <button class="modal-btn btn-confirm-save" onclick="savePointEdit()">Salvar Alterações</button>
+                <button class="modal-btn btn-cancel" onclick="closeEditModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
@@ -390,6 +466,12 @@
                 redrawAllPlotted();
             }
             closeModal();
+        }
+        function deletePointDirectly(id) {
+            if (pointMetadata[id]) {
+                pointMetadata[id].deleted = true;
+                redrawAllPlotted();
+            }
         }
 
         // --- MAPA ---
@@ -1029,14 +1111,132 @@
             if (stateChanged) { redrawAllPlotted(); }
         }
 
-        function editPointName(id) {
-            if (pointMetadata[id]) {
-                const newName = prompt("Digite o novo nome para este registo:", pointMetadata[id].name);
-                if (newName !== null && newName.trim() !== "") {
-                    pointMetadata[id].name = newName.trim();
-                    redrawAllPlotted(); 
+        function copyCoordinates(lat, lon, btnElement) {
+            const textToCopy = `${lat}, ${lon}`;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    showCopyFeedback(btnElement);
+                }).catch(err => {
+                    fallbackCopyText(textToCopy, btnElement);
+                });
+            } else {
+                fallbackCopyText(textToCopy, btnElement);
+            }
+        }
+
+        function fallbackCopyText(text, btnElement) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showCopyFeedback(btnElement);
+            } catch (err) {
+                alert("Coordenadas: " + text);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function showCopyFeedback(btnElement) {
+            if (!btnElement) return;
+            const originalText = btnElement.innerHTML;
+            btnElement.innerHTML = "✅ Copiado!";
+            btnElement.style.backgroundColor = "#2e7d32";
+            btnElement.style.color = "#fff";
+            setTimeout(() => {
+                btnElement.innerHTML = originalText;
+                btnElement.style.backgroundColor = "";
+                btnElement.style.color = "";
+            }, 1500);
+        }
+
+        function findPointById(id) {
+            for (const fileObj of loadedFilesData) {
+                const pt = fileObj.allPoints.find(p => p.id === id);
+                if (pt) return { fileObj, pt };
+            }
+            return null;
+        }
+
+        let eventToEditId = null;
+
+        function openEditModal(id) {
+            const res = findPointById(id);
+            if (!res) return;
+            const { pt } = res;
+            const meta = pointMetadata[id];
+            if (!meta) return;
+
+            eventToEditId = id;
+            document.getElementById('edit-name').value = meta.name || '';
+            document.getElementById('edit-lat').value = pt.lat;
+            document.getElementById('edit-lon').value = pt.lon;
+
+            const erbContainer = document.getElementById('edit-erb-fields');
+            if (pt.azim !== null && !isNaN(pt.azim)) {
+                erbContainer.style.display = 'block';
+                document.getElementById('edit-azim').value = pt.azim;
+                document.getElementById('edit-radius').value = meta.radius || 2000;
+            } else {
+                erbContainer.style.display = 'none';
+            }
+
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            eventToEditId = null;
+            document.getElementById('edit-modal').style.display = 'none';
+        }
+
+        function savePointEdit() {
+            if (!eventToEditId) return;
+            const res = findPointById(eventToEditId);
+            if (!res) { closeEditModal(); return; }
+
+            const { pt } = res;
+            const meta = pointMetadata[eventToEditId];
+
+            const nameVal = document.getElementById('edit-name').value.trim();
+            const latVal = document.getElementById('edit-lat').value;
+            const lonVal = document.getElementById('edit-lon').value;
+
+            if (!latVal || !lonVal) {
+                alert("Latitude e Longitude são obrigatórias.");
+                return;
+            }
+
+            const newLat = parseCoordinate(latVal);
+            const newLon = parseCoordinate(lonVal);
+
+            if (isNaN(newLat) || isNaN(newLon)) {
+                alert("Coordenadas numéricas inválidas.");
+                return;
+            }
+
+            if (nameVal) meta.name = nameVal;
+            pt.lat = newLat;
+            pt.lon = newLon;
+
+            if (pt.azim !== null && !isNaN(pt.azim)) {
+                const azimVal = document.getElementById('edit-azim').value;
+                const radiusVal = document.getElementById('edit-radius').value;
+                if (azimVal !== '') {
+                    const newAzim = parseCoordinate(azimVal);
+                    if (!isNaN(newAzim)) pt.azim = newAzim;
+                }
+                if (radiusVal !== '') {
+                    const newRadius = parseInt(radiusVal, 10);
+                    if (!isNaN(newRadius) && newRadius > 0) meta.radius = newRadius;
                 }
             }
+
+            closeEditModal();
+            redrawAllPlotted();
         }
 
         function updateFileListUI() {
@@ -1089,20 +1289,15 @@
                         const rightDiv = document.createElement('div'); rightDiv.className = 'data-item-right';
                         const colorInput = document.createElement('input'); colorInput.type = 'color'; colorInput.className = 'inline-color-picker'; colorInput.value = meta.color;
                         colorInput.onchange = (e) => { meta.color = e.target.value; redrawAllPlotted(); };
-                        rightDiv.appendChild(colorInput);
-
-                        if (pt.azim !== null && !isNaN(pt.azim)) {
-                            const radiusInput = document.createElement('input'); radiusInput.type = 'number'; radiusInput.className = 'inline-radius-picker'; radiusInput.value = meta.radius || 2000; radiusInput.min = '100'; radiusInput.step = '100';
-                            radiusInput.onchange = (e) => { meta.radius = parseInt(e.target.value, 10) || 2000; redrawAllPlotted(); };
-                            rightDiv.appendChild(radiusInput);
-                        }
                         
-                        const editBtn = document.createElement('button'); editBtn.className = 'icon-btn'; editBtn.innerHTML = '✏️';
-                        editBtn.onclick = () => editPointName(pt.id);
-                        const delBtn = document.createElement('button'); delBtn.className = 'icon-btn'; delBtn.innerHTML = '🗑️';
-                        delBtn.onclick = () => openDeleteModal(pt.id);
+                        const copyBtn = document.createElement('button'); copyBtn.className = 'icon-btn'; copyBtn.title = 'Copiar Coordenadas'; copyBtn.innerHTML = '📋';
+                        copyBtn.onclick = () => copyCoordinates(pt.lat, pt.lon, copyBtn);
+                        const editBtn = document.createElement('button'); editBtn.className = 'icon-btn'; editBtn.title = 'Editar Registro'; editBtn.innerHTML = '✏️';
+                        editBtn.onclick = () => openEditModal(pt.id);
+                        const delBtn = document.createElement('button'); delBtn.className = 'icon-btn'; delBtn.title = 'Excluir Registro'; delBtn.innerHTML = '🗑️';
+                        delBtn.onclick = () => deletePointDirectly(pt.id);
 
-                        rightDiv.appendChild(editBtn); rightDiv.appendChild(delBtn);
+                        rightDiv.appendChild(colorInput); rightDiv.appendChild(copyBtn); rightDiv.appendChild(editBtn); rightDiv.appendChild(delBtn);
                         li.appendChild(leftDiv); li.appendChild(rightDiv);
                         fragment.appendChild(li);
                     });
@@ -1177,13 +1372,15 @@
                     const icon = pt.count > 1 ? L.divIcon({ className: 'count-icon', html: pt.count, iconSize: [30,30], iconAnchor: [15,15] }) : null;
                     const marker = icon ? L.marker([pt.lat, pt.lon], {icon}) : L.circleMarker([pt.lat, pt.lon], {radius: 5, color: pt.color, fillOpacity: 0.8, weight: 1});
                     
-                    // Configuração do Popup padrão simplificado para cliques
-                    let popupText = `<strong>Último registro:</strong><br>${latestRecord}`;
+                    // Configuração do Popup padrão com coordenadas e botão de cópia
+                    let popupText = `<strong>Último registro:</strong><br>${latestRecord}<br>`;
+                    popupText += `<small>📍 <strong>Lat:</strong> ${pt.lat} | <strong>Lon:</strong> ${pt.lon}</small><br>`;
                     if (pt.azim !== null && !isNaN(pt.azim)) {
-                        popupText += `<br><small>Direção: ${pt.azim}° | Raio: ${pt.radius}m</small>`;
+                        popupText += `<small>Direção: ${pt.azim}° | Raio: ${pt.radius}m</small><br>`;
                     } else {
-                        popupText += `<br><small>Eventos ativos agrupados: ${pt.count}</small>`;
+                        popupText += `<small>Eventos ativos agrupados: ${pt.count}</small><br>`;
                     }
+                    popupText += `<button class="popup-copy-btn" onclick="copyCoordinates('${pt.lat}', '${pt.lon}', this)">📋 Copiar Coordenadas</button>`;
                     
                     marker.bindPopup(popupText);
                     
@@ -1203,7 +1400,12 @@
                         const sectorPoints = createSector([pt.lat, pt.lon], pt.radius, pt.azim, beamwidth);
                         const erbPolygon = L.polygon(sectorPoints, { stroke: false, fillColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: 1 });
                         
-                        erbPolygon.bindPopup(`<strong>Último registro:</strong><br>${latestRecord}<br><small>Direção: ${pt.azim}° | Raio: ${pt.radius}m</small>`);
+                        let erbPopupText = `<strong>Último registro:</strong><br>${latestRecord}<br>`;
+                        erbPopupText += `<small>📍 <strong>Lat:</strong> ${pt.lat} | <strong>Lon:</strong> ${pt.lon}</small><br>`;
+                        erbPopupText += `<small>Direção: ${pt.azim}° | Raio: ${pt.radius}m</small><br>`;
+                        erbPopupText += `<button class="popup-copy-btn" onclick="copyCoordinates('${pt.lat}', '${pt.lon}', this)">📋 Copiar Coordenadas</button>`;
+                        
+                        erbPolygon.bindPopup(erbPopupText);
                         erbsLayer.addLayer(erbPolygon);
 
                         const endPoint = computeDestinationPoint({ lat: pt.lat, lng: pt.lon }, pt.radius, pt.azim);
