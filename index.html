@@ -493,7 +493,11 @@
         function parseCoordinate(val) {
             if (typeof val === 'number') return val;
             if (val === undefined || val === null || val === '') return NaN;
-            return parseFloat(String(val).replace(',', '.'));
+            const str = String(val).trim();
+            if (str.includes('-') && str.split('-').length > 2) {
+                return parseDMS(str);
+            }
+            return parseFloat(str.replace(',', '.'));
         }
 
         function cleanString(str) {
@@ -796,7 +800,7 @@
                 const temLat = rowStrings.some(str => str.includes('latitude') || str === 'lat');
                 const temLon = rowStrings.some(str => str.includes('longitude') || str === 'lon' || str === 'lng');
                 const temEndereco = rowStrings.some(str => str.includes('endereco'));
-                const temCgi = rowStrings.some(str => str.includes('cgi') || str.includes('erb') || str.includes('celula'));
+                const temCgi = rowStrings.some(str => str.includes('cgi') || str.includes('erb') || str.includes('celula') || str.includes('local origem') || str.includes('local destino'));
                 if ((temLat && temLon) || temEndereco || temCgi) { headerIndex = i; headers = row.map(cell => cell ? String(cell) : ""); break; }
             }
 
@@ -908,13 +912,15 @@
                                 for (let j = 0; j < headers.length; j++) {
                                     const colName = cleanString(headers[j]);
                                     const val = row[j];
-                                    if (colName === 'cgi/erb' || colName === 'cgi' || colName === 'erb') {
+                                    if (colName === 'cgi/erb' || colName === 'cgi') {
+                                        cgiCode = String(val || '').trim();
+                                    } else if (colName === 'erb' && !cgiCode) {
                                         cgiCode = String(val || '').trim();
                                     } else if (colName === 'latitude') {
                                         latVal = val;
                                     } else if (colName === 'longitude') {
                                         lonVal = val;
-                                    } else if (colName === 'azimute' || colName === 'azimuth') {
+                                    } else if (colName === 'azimute' || colName === 'azimuth' || colName === 'azi') {
                                         azimVal = val;
                                     }
                                 }
@@ -932,10 +938,10 @@
                     }
 
                     // Encontra a melhor aba de dados/conexões para processar
-                    // 1. Prioridade máxima: Abas de conexões ou extratos
+                    // 1. Prioridade máxima: Abas de conexões, extratos, tráfego ou chamadas
                     let targetSheetName = workbook.SheetNames.find(name => {
                         const l = cleanString(name);
-                        return l.includes('extrato conexoes') || l.includes('conexoes') || l.includes('trafego');
+                        return (l.includes('extrato conexoes') || l.includes('conexoes') || l.includes('trafego') || l.includes('relatorio de chamadas') || l.includes('chamadas')) && !l.includes('wifi');
                     });
                     
                     // 2. Prioridade média: Abas de eventos ou chamadas (mas ignorando portabilidade que é vazia)
@@ -1037,9 +1043,15 @@
                     for (const key in row) {
                         if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
                         const normKey = cleanString(key);
-                        if (normKey === 'ultima cgi/erb' || normKey === 'primeira cgi/erb' || normKey === 'cgi/erb' || normKey === 'cgi' || normKey === 'erb') {
-                            cgiCode = String(row[key] || '').trim();
-                            break;
+                        if (normKey === 'local origem' || normKey === 'local_origem' || normKey === 'ultima cgi/erb' || normKey === 'primeira cgi/erb' || normKey === 'cgi/erb' || normKey === 'cgi' || normKey === 'erb') {
+                            if (row[key] && String(row[key]).trim()) {
+                                cgiCode = String(row[key]).trim();
+                                break;
+                            }
+                        } else if (normKey === 'local destino' || normKey === 'local_destino') {
+                            if (!cgiCode && row[key] && String(row[key]).trim()) {
+                                cgiCode = String(row[key]).trim();
+                            }
                         }
                     }
                     if (cgiCode && cgiMap && cgiMap[cgiCode]) {
