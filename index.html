@@ -267,9 +267,9 @@
         <h2>Análise de Geolocalização</h2>
         
         <div class="file-upload-wrapper">
-            <label for="file-upload" class="custom-file-upload">📂 Importar (CSV / Excel / JSON)</label>
-            <input id="file-upload" type="file" accept=".csv, .xlsx, .xls, .json"/>
-            <button class="btn-action btn-download" onclick="exportVisiblePointsToJson()">💾 Baixar  (JSON)</button>           
+            <label for="file-upload" class="custom-file-upload">📂 Importar CSV EXCEL ZIP JSON</label>
+            <input id="file-upload" type="file" accept=".csv, .xlsx, .xls, .json, .zip"/>
+            <button class="btn-action btn-download" onclick="exportVisiblePointsToJson()">💾 Baixar  JSON</button>           
             
             <div class="code-buttons-wrapper">
                 <button class="btn-action btn-code-generate" onclick="generateShareCode()">🔗 Copiar</button>
@@ -412,6 +412,7 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 
     <script>
@@ -823,6 +824,193 @@
         }
 
         // --- IMPORTAÇÃO DE ARQUIVOS FÍSICOS ---
+        function processJsonContent(fileName, jsonText) {
+            try {
+                const parsedData = JSON.parse(jsonText);
+                if (Array.isArray(parsedData)) { processJsonData(fileName, parsedData); } 
+                else { alert(`Formato incorreto do JSON em "${fileName}".`); }
+            } catch(err) { alert(`Erro ao ler o arquivo JSON "${fileName}".`); }
+        }
+
+        function processCsvContent(fileName, csvData) {
+            Papa.parse(csvData, {
+                header: false, skipEmptyLines: true, dynamicTyping: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        const jsonData = extractDataWithDynamicHeader(results.data);
+                        if (jsonData) { processRawDataFile(fileName, jsonData); } 
+                        else { alert(`Colunas geográficas não localizadas em "${fileName}".`); }
+                    }
+                }
+            });
+        }
+
+        function processXlsxBuffer(fileName, buffer) {
+            try {
+                const workbook = XLSX.read(new Uint8Array(buffer), {type: 'array'});
+                
+                // Recalcula o range (dimensão) de cada aba no workbook
+                workbook.SheetNames.forEach(name => {
+                    const ws = workbook.Sheets[name];
+                    if (ws) {
+                        const range = { s: { r: Infinity, c: Infinity }, e: { r: 0, c: 0 } };
+                        let hasCells = false;
+                        Object.keys(ws).forEach(x => {
+                            if (x[0] !== "!") {
+                                hasCells = true;
+                                const decoded = XLSX.utils.decode_cell(x);
+                                range.s.c = Math.min(range.s.c, decoded.c);
+                                range.s.r = Math.min(range.s.r, decoded.r);
+                                range.e.c = Math.max(range.e.c, decoded.c);
+                                range.e.r = Math.max(range.e.r, decoded.r);
+                            }
+                        });
+                        if (hasCells) {
+                            ws['!ref'] = XLSX.utils.encode_range(range);
+                        }
+                    }
+                });
+
+                // Verifica se há alguma aba de antenas para gerar o cgiMap
+                const antennaSheetName = workbook.SheetNames.find(name => {
+                    const l = cleanString(name);
+                    return l.includes('antena') || l.includes('erb');
+                });
+                
+                let cgiMap = {};
+                if (antennaSheetName) {
+                    const wsAntena = workbook.Sheets[antennaSheetName];
+                    const rawArrayAntena = XLSX.utils.sheet_to_json(wsAntena, {header: 1, defval: ""});
+                    
+                    let headerIndex = -1;
+                    let headers = [];
+                    for (let i = 0; i < rawArrayAntena.length; i++) {
+                        const row = rawArrayAntena[i];
+                        if (!row || !Array.isArray(row)) continue;
+                        const rowStrings = row.map(cell => cleanString(cell));
+                        const temCgi = rowStrings.some(str => str.includes('cgi') || str.includes('erb'));
+                        const temLat = rowStrings.some(str => str.includes('latitude') || str === 'lat');
+                        if (temCgi && temLat) { headerIndex = i; headers = row.map(cell => cell ? String(cell) : ""); break; }
+                    }
+                    
+                    if (headerIndex !== -1) {
+                        for (let i = headerIndex + 1; i < rawArrayAntena.length; i++) {
+                            const row = rawArrayAntena[i];
+                            if (!row || row.length === 0) continue;
+                            let cgiCode = '';
+                            let latVal = undefined;
+                            let lonVal = undefined;
+                            let azimVal = null;
+                            
+                            for (let j = 0; j < headers.length; j++) {
+                                const colName = cleanString(headers[j]);
+                                const val = row[j];
+                                if (colName === 'cgi/erb' || colName === 'cgi') {
+                                    cgiCode = String(val || '').trim();
+                                } else if (colName === 'erb' && !cgiCode) {
+                                    cgiCode = String(val || '').trim();
+                                } else if (colName === 'latitude') {
+                                    latVal = val;
+                                } else if (colName === 'longitude') {
+                                    lonVal = val;
+                                } else if (colName === 'azimute' || colName === 'azimuth' || colName === 'azi') {
+                                    azimVal = val;
+                                }
+                            }
+                            
+                            if (cgiCode && latVal !== undefined && lonVal !== undefined) {
+                                const lat = parseCoordinate(latVal);
+                                const lon = parseCoordinate(lonVal);
+                                const azim = azimVal !== null && azimVal !== '' ? parseCoordinate(azimVal) : null;
+                                if (!isNaN(lat) && !isNaN(lon)) {
+                                    cgiMap[cgiCode] = { lat, lon, azim };
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Encontra a melhor aba de dados/conexões para processar
+                // 1. Prioridade máxima: Abas de conexões, extratos, tráfego ou chamadas
+                let targetSheetName = workbook.SheetNames.find(name => {
+                    const l = cleanString(name);
+                    return (l.includes('extrato conexoes') || l.includes('conexoes') || l.includes('trafego') || l.includes('relatorio de chamadas') || l.includes('chamadas')) && !l.includes('wifi');
+                });
+                
+                // 2. Prioridade média: Abas de eventos ou chamadas (mas ignorando portabilidade que é vazia)
+                if (!targetSheetName) {
+                    targetSheetName = workbook.SheetNames.find(name => {
+                        const l = cleanString(name);
+                        return (l.includes('eventos') || l.includes('chamadas')) && !l.includes('portabilidade');
+                    });
+                }
+                
+                // 3. Fallback: Qualquer aba que não seja de antenas, pesquisa ou portabilidade
+                if (!targetSheetName) {
+                    targetSheetName = workbook.SheetNames.find(name => {
+                        const l = cleanString(name);
+                        return !l.includes('antena') && !l.includes('erb') && !l.includes('pesquisa') && !l.includes('portabilidade');
+                    }) || workbook.SheetNames[0];
+                }
+                
+                const sheet = workbook.Sheets[targetSheetName];
+                const rawArray = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ""});
+                if (rawArray && rawArray.length > 0) {
+                    const jsonData = extractDataWithDynamicHeader(rawArray);
+                    if (jsonData) { 
+                        processRawDataFile(fileName, jsonData, cgiMap); 
+                    } 
+                    else { 
+                        alert(`Colunas geográficas não localizadas em "${fileName}".`); 
+                    }
+                }
+            } catch(err) {
+                console.error(err);
+                alert(`Erro ao processar a planilha "${fileName}": ` + (err.message || err));
+            }
+        }
+
+        async function processZipBuffer(zipFileName, arrayBuffer) {
+            if (typeof JSZip === 'undefined') {
+                alert("Biblioteca JSZip não carregada.");
+                return;
+            }
+            try {
+                const zip = await JSZip.loadAsync(arrayBuffer);
+                const fileNames = Object.keys(zip.files);
+                let foundCompatible = 0;
+
+                for (const rawName of fileNames) {
+                    const entry = zip.files[rawName];
+                    if (entry.dir) continue;
+                    const baseName = rawName.split('/').pop();
+                    if (rawName.startsWith('__MACOSX') || baseName.startsWith('.')) continue;
+
+                    const lower = baseName.toLowerCase();
+                    if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+                        foundCompatible++;
+                        const buffer = await entry.async('arraybuffer');
+                        processXlsxBuffer(baseName, buffer);
+                    } else if (lower.endsWith('.csv')) {
+                        foundCompatible++;
+                        const text = await entry.async('string');
+                        processCsvContent(baseName, text);
+                    } else if (lower.endsWith('.json')) {
+                        foundCompatible++;
+                        const text = await entry.async('string');
+                        processJsonContent(baseName, text);
+                    }
+                }
+
+                if (foundCompatible === 0) {
+                    alert(`Nenhum arquivo compatível (.xlsx, .xls, .csv, .json) encontrado dentro do arquivo ZIP "${zipFileName}".`);
+                }
+            } catch(err) {
+                console.error(err);
+                alert(`Erro ao descompactar o arquivo ZIP "${zipFileName}": ` + (err.message || err));
+            }
+        }
+
         document.getElementById('file-upload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -830,148 +1018,20 @@
 
             if (fileName.endsWith('.json')) {
                 const reader = new FileReader();
-                reader.onload = function(event) {
-                    try {
-                        const parsedData = JSON.parse(event.target.result);
-                        if (Array.isArray(parsedData)) { processJsonData(file.name, parsedData); } 
-                        else { alert("Formato incorreto do JSON."); }
-                    } catch(err) { alert("Erro ao ler o arquivo JSON."); }
-                };
+                reader.onload = function(event) { processJsonContent(file.name, event.target.result); };
                 reader.readAsText(file);
             } 
             else if (fileName.endsWith('.csv')) {
-                Papa.parse(file, {
-                    header: false, skipEmptyLines: true, dynamicTyping: true,
-                    complete: function(results) {
-                        if (results.data && results.data.length > 0) {
-                            const jsonData = extractDataWithDynamicHeader(results.data);
-                            if (jsonData) { processRawDataFile(file.name, jsonData); } 
-                            else { alert(`Colunas geográficas não localizadas em "${file.name}".`); }
-                        }
-                    }
-                });
+                processCsvContent(file.name, file);
             } 
             else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
-                    const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-                    
-                    // Recalcula o range (dimensão) de cada aba no workbook
-                    workbook.SheetNames.forEach(name => {
-                        const ws = workbook.Sheets[name];
-                        if (ws) {
-                            const range = { s: { r: Infinity, c: Infinity }, e: { r: 0, c: 0 } };
-                            let hasCells = false;
-                            Object.keys(ws).forEach(x => {
-                                if (x[0] !== "!") {
-                                    hasCells = true;
-                                    const decoded = XLSX.utils.decode_cell(x);
-                                    range.s.c = Math.min(range.s.c, decoded.c);
-                                    range.s.r = Math.min(range.s.r, decoded.r);
-                                    range.e.c = Math.max(range.e.c, decoded.c);
-                                    range.e.r = Math.max(range.e.r, decoded.r);
-                                }
-                            });
-                            if (hasCells) {
-                                ws['!ref'] = XLSX.utils.encode_range(range);
-                            }
-                        }
-                    });
-
-                    // Verifica se há alguma aba de antenas para gerar o cgiMap
-                    const antennaSheetName = workbook.SheetNames.find(name => {
-                        const l = cleanString(name);
-                        return l.includes('antena') || l.includes('erb');
-                    });
-                    
-                    let cgiMap = {};
-                    if (antennaSheetName) {
-                        const wsAntena = workbook.Sheets[antennaSheetName];
-                        const rawArrayAntena = XLSX.utils.sheet_to_json(wsAntena, {header: 1, defval: ""});
-                        
-                        let headerIndex = -1;
-                        let headers = [];
-                        for (let i = 0; i < rawArrayAntena.length; i++) {
-                            const row = rawArrayAntena[i];
-                            if (!row || !Array.isArray(row)) continue;
-                            const rowStrings = row.map(cell => cleanString(cell));
-                            const temCgi = rowStrings.some(str => str.includes('cgi') || str.includes('erb'));
-                            const temLat = rowStrings.some(str => str.includes('latitude') || str === 'lat');
-                            if (temCgi && temLat) { headerIndex = i; headers = row.map(cell => cell ? String(cell) : ""); break; }
-                        }
-                        
-                        if (headerIndex !== -1) {
-                            for (let i = headerIndex + 1; i < rawArrayAntena.length; i++) {
-                                const row = rawArrayAntena[i];
-                                if (!row || row.length === 0) continue;
-                                let cgiCode = '';
-                                let latVal = undefined;
-                                let lonVal = undefined;
-                                let azimVal = null;
-                                
-                                for (let j = 0; j < headers.length; j++) {
-                                    const colName = cleanString(headers[j]);
-                                    const val = row[j];
-                                    if (colName === 'cgi/erb' || colName === 'cgi') {
-                                        cgiCode = String(val || '').trim();
-                                    } else if (colName === 'erb' && !cgiCode) {
-                                        cgiCode = String(val || '').trim();
-                                    } else if (colName === 'latitude') {
-                                        latVal = val;
-                                    } else if (colName === 'longitude') {
-                                        lonVal = val;
-                                    } else if (colName === 'azimute' || colName === 'azimuth' || colName === 'azi') {
-                                        azimVal = val;
-                                    }
-                                }
-                                
-                                if (cgiCode && latVal !== undefined && lonVal !== undefined) {
-                                    const lat = parseCoordinate(latVal);
-                                    const lon = parseCoordinate(lonVal);
-                                    const azim = azimVal !== null && azimVal !== '' ? parseCoordinate(azimVal) : null;
-                                    if (!isNaN(lat) && !isNaN(lon)) {
-                                        cgiMap[cgiCode] = { lat, lon, azim };
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Encontra a melhor aba de dados/conexões para processar
-                    // 1. Prioridade máxima: Abas de conexões, extratos, tráfego ou chamadas
-                    let targetSheetName = workbook.SheetNames.find(name => {
-                        const l = cleanString(name);
-                        return (l.includes('extrato conexoes') || l.includes('conexoes') || l.includes('trafego') || l.includes('relatorio de chamadas') || l.includes('chamadas')) && !l.includes('wifi');
-                    });
-                    
-                    // 2. Prioridade média: Abas de eventos ou chamadas (mas ignorando portabilidade que é vazia)
-                    if (!targetSheetName) {
-                        targetSheetName = workbook.SheetNames.find(name => {
-                            const l = cleanString(name);
-                            return (l.includes('eventos') || l.includes('chamadas')) && !l.includes('portabilidade');
-                        });
-                    }
-                    
-                    // 3. Fallback: Qualquer aba que não seja de antenas, pesquisa ou portabilidade
-                    if (!targetSheetName) {
-                        targetSheetName = workbook.SheetNames.find(name => {
-                            const l = cleanString(name);
-                            return !l.includes('antena') && !l.includes('erb') && !l.includes('pesquisa') && !l.includes('portabilidade');
-                        }) || workbook.SheetNames[0];
-                    }
-                    
-                    const sheet = workbook.Sheets[targetSheetName];
-                    const rawArray = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ""});
-                    if (rawArray && rawArray.length > 0) {
-                        const jsonData = extractDataWithDynamicHeader(rawArray);
-                        if (jsonData) { 
-                            processRawDataFile(file.name, jsonData, cgiMap); 
-                        } 
-                        else { 
-                            alert(`Colunas geográficas não localizadas em "${file.name}".`); 
-                        }
-                    }
-                };
+                reader.onload = function(e) { processXlsxBuffer(file.name, e.target.result); };
+                reader.readAsArrayBuffer(file);
+            }
+            else if (fileName.endsWith('.zip')) {
+                const reader = new FileReader();
+                reader.onload = function(e) { processZipBuffer(file.name, e.target.result); };
                 reader.readAsArrayBuffer(file);
             }
             this.value = '';
