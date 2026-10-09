@@ -267,9 +267,9 @@
         <h2>Análise de Geolocalização</h2>
         
         <div class="file-upload-wrapper">
-            <label for="file-upload" class="custom-file-upload">📂 Importar CSV EXCEL ZIP JSON</label>
+            <label for="file-upload" class="custom-file-upload">📂 Importar (CSV / Excel / JSON / ZIP)</label>
             <input id="file-upload" type="file" accept=".csv, .xlsx, .xls, .json, .zip"/>
-            <button class="btn-action btn-download" onclick="exportVisiblePointsToJson()">💾 Baixar  JSON</button>           
+            <button class="btn-action btn-download" onclick="exportVisiblePointsToJson()">💾 Baixar  (JSON)</button>           
             
             <div class="code-buttons-wrapper">
                 <button class="btn-action btn-code-generate" onclick="generateShareCode()">🔗 Copiar</button>
@@ -510,18 +510,101 @@
                 .toLowerCase();
         }
 
-        function formatDateTimeValue(dateStr, horaStr) {
-            let formattedDate = String(dateStr || '').trim();
-            let formattedTime = String(horaStr || '').trim();
-            if (formattedDate && formattedDate.length === 8 && /^\d+$/.test(formattedDate)) {
-                formattedDate = formattedDate.substring(0, 2) + '/' + formattedDate.substring(2, 4) + '/' + formattedDate.substring(4, 8);
+        function formatDateTimeValue(dateVal, horaVal) {
+            if (dateVal === undefined || dateVal === null || dateVal === '') return '';
+
+            // Se já for um objeto Date nativo do JS
+            if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+                const pad = (n) => String(n).padStart(2, '0');
+                const day = pad(dateVal.getDate());
+                const mon = pad(dateVal.getMonth() + 1);
+                const yr = dateVal.getFullYear();
+                const hr = pad(dateVal.getHours());
+                const min = pad(dateVal.getMinutes());
+                const sec = pad(dateVal.getSeconds());
+                return `${day}/${mon}/${yr} ${hr}:${min}:${sec}`;
             }
-            if (formattedTime && formattedTime.length === 6 && /^\d+$/.test(formattedTime)) {
-                formattedTime = formattedTime.substring(0, 2) + ':' + formattedTime.substring(2, 4) + ':' + formattedTime.substring(4, 6);
+
+            let dateStr = String(dateVal).trim();
+            let horaStr = String(horaVal || '').trim();
+
+            if (horaStr.length === 6 && /^\d+$/.test(horaStr)) {
+                horaStr = horaStr.substring(0, 2) + ':' + horaStr.substring(2, 4) + ':' + horaStr.substring(4, 6);
             }
+
+            const numStr = dateStr.replace(',', '.');
+            if (/^-?\d+(\.\d+)?$/.test(numStr)) {
+                const num = parseFloat(numStr);
+
+                // 1. Caso especial: formato DDMMYYYY numérico de 8 dígitos (ex: 01032026)
+                if (dateStr.length === 8 && /^\d+$/.test(dateStr)) {
+                    const day = dateStr.substring(0, 2);
+                    const mon = dateStr.substring(2, 4);
+                    const yr = dateStr.substring(4, 8);
+                    const mNum = parseInt(mon, 10);
+                    const dNum = parseInt(day, 10);
+                    if (mNum >= 1 && mNum <= 12 && dNum >= 1 && dNum <= 31) {
+                        let res = `${day}/${mon}/${yr}`;
+                        if (horaStr) res += ` ${horaStr}`;
+                        return res;
+                    }
+                }
+
+                // 2. Timestamp Unix em milissegundos (13 dígitos)
+                if (num >= 1000000000000 && num <= 2500000000000) {
+                    const d = new Date(num);
+                    if (!isNaN(d.getTime())) {
+                        const pad = (n) => String(n).padStart(2, '0');
+                        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                    }
+                }
+
+                // 3. Timestamp Unix em segundos (10 dígitos)
+                if (num >= 1000000000 && num <= 2500000000) {
+                    const d = new Date(num * 1000);
+                    if (!isNaN(d.getTime())) {
+                        const pad = (n) => String(n).padStart(2, '0');
+                        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                    }
+                }
+
+                // 4. Data Serial do Excel (dias desde 30/12/1899)
+                if (num >= 1 && num <= 100000) {
+                    const d = new Date(Math.round((num - 25569) * 86400 * 1000));
+                    if (!isNaN(d.getTime())) {
+                        const pad = (n) => String(n).padStart(2, '0');
+                        const day = pad(d.getUTCDate());
+                        const mon = pad(d.getUTCMonth() + 1);
+                        const yr = d.getUTCFullYear();
+                        const hr = pad(d.getUTCHours());
+                        const min = pad(d.getUTCMinutes());
+                        const sec = pad(d.getUTCSeconds());
+                        if (hr === '00' && min === '00' && sec === '00' && !numStr.includes('.')) {
+                            let res = `${day}/${mon}/${yr}`;
+                            if (horaStr) res += ` ${horaStr}`;
+                            return res;
+                        }
+                        return `${day}/${mon}/${yr} ${hr}:${min}:${sec}`;
+                    }
+                }
+            }
+
+            // Verifica formato ISO (YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ss)
+            const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+            if (isoMatch) {
+                const [_, y, m, d, h, min, s] = isoMatch;
+                let res = `${d}/${m}/${y}`;
+                if (h !== undefined) {
+                    res += ` ${h}:${min}:${s || '00'}`;
+                } else if (horaStr) {
+                    res += ` ${horaStr}`;
+                }
+                return res;
+            }
+
             let result = '';
-            if (formattedDate) result += formattedDate;
-            if (formattedTime) result += (result ? ' ' : '') + formattedTime;
+            if (dateStr) result += dateStr;
+            if (horaStr && !result.includes(horaStr)) result += (result ? ' ' : '') + horaStr;
             return result;
         }
 
@@ -1132,7 +1215,7 @@
                 let dateTimeRaw = formatDateTimeValue(dataStr, horaStr);
 
                 if (!dateTimeRaw) {
-                    dateTimeRaw = fallbackDateTime || col4Val || 'Data Oculta';
+                    dateTimeRaw = formatDateTimeValue(fallbackDateTime || col4Val) || fallbackDateTime || col4Val || 'Data Oculta';
                 }
 
                 const signature = `${dateTimeRaw}_${lat}_${lon}_${azim}`;
